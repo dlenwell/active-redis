@@ -145,7 +145,7 @@ class DataType(object):
 
   def delete(self):
     """Deletes the data type."""
-    self.redis.delete(self.key)
+    self._execute_script('delete_all', self.key)
 
 class Script(object):
   """
@@ -876,3 +876,83 @@ class SortedSet(DataType):
   """
   type = 'sorted_set'
   scripts = {}
+
+@List.script
+@Hash.script
+@Set.script
+@SortedSet.script
+class StructureDelete(Script):
+  """
+  Finds and deletes references to other Redis data types within all Redis data structures.
+  """
+  id = 'delete_all'
+  keys = ['key']
+
+  script = """
+  local function is_redis_datatype(value)
+    return string.find(value, 'redis:struct') == 0
+  end
+
+  local function get_reference(value)
+    return string.sub(value, 13)
+  end
+
+  local function get_type(key)
+    return redis.call('TYPE', key)
+  end
+
+  local function delete_references(key)
+    local type = get_type(key)
+    if type == 'list' then delete_list(key)
+    elseif type == 'hash' then delete_hash(key)
+    elseif type == 'set' then delete_set(key)
+    elseif type == 'sorted_set' then delete_sorted_set(key)
+    else redis.call('DEL', key)
+    end
+  end
+
+  local function check_references(value)
+    if is_redis_datatype(value) then
+      delete_references(get_reference(value))
+    end
+  end
+
+  local function delete_list(key)
+    local i = 0
+    local item = redis.call('LINDEX', key, i)
+    while item do
+      check_references(item)
+      i = i + 1
+      item = redis.call('LINDEX', key, i)
+    end
+    redis.call('DEL', key)
+  end
+
+  local function delete_hash(key)
+    local vals = redis.call('HVALS', key)
+    for i = 1, #vals do
+      check_references(vals[i])
+    end
+    redis.call('DEL', key)
+  end
+
+  local function delete_set(key)
+    local members = redis.call('SMEMBERS', key)
+    for i = 1, #members do
+      check_references(members[i])
+    end
+    redis.call('DEL', key)
+  end
+
+  local function delete_sorted_set(key)
+    local count = redis.call('ZCARD', key)
+    local members = redis.call('ZRANGE', key, 0, count)
+    for i = 1, #members do
+      check_references(members[i])
+    end
+    redis.call('DEL', key)
+  end
+
+  local key = KEYS[1]
+  delete_references(key)
+  """

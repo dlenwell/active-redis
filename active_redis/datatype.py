@@ -12,6 +12,7 @@ class Encoder(object):
     self.redis = redis
 
   def encode(self, item):
+    """Encodes a Python object."""
     if self._is_redis(item):
       return self._encode_redis_item(item)
     else:
@@ -69,8 +70,15 @@ class DataType(object):
 
   def __init__(self, redis, key=None):
     self.redis = redis
-    self.encoder = Encoder(redis)
     self.key = key or self._create_unique_key()
+    self.encoder = Encoder(redis)
+    self.encode = self.encoder.encode
+    self.decode = self.encoder.decode
+
+    self._scripts = {}
+    if self.__class__.scripts is not None:
+      for id, script in self.__class__.scripts.iteritems():
+        self._scripts[id] = self._load_script(id)
 
   @classmethod
   def register(cls, handler):
@@ -105,9 +113,21 @@ class DataType(object):
     except TypeError:
       raise DataTypeErrpr("Failed to get script %s." % (id,))
 
+  def __setattr__(self, name, value):
+    """Allows the data type key to be changed."""
+    if name == 'key':
+      self.rename(value)
+
+  def _load_script(self, id):
+    """Loads a server-side Lua script."""
+    return self.__class__.get_script(id)(self.redis)
+
   def _execute_script(self, id, *args, **kwargs):
     """Executes a server-side Lua script."""
-    return self.get_script(id)(self.redis).execute(*args, **kwargs)
+    try:
+      return self._scripts[id].execute(*args, **kwargs)
+    except KeyError:
+      raise DataTypeError("Invalid script %s." % (id,))
 
   def _create_unique_key(self):
     """Generates a unique Redis key."""
@@ -136,7 +156,7 @@ class Script(object):
   """
   Base class for Redis server-side lua scripts.
   """
-  name = None
+  id = None
   is_registered = False
   script = ''
   keys = []
@@ -211,14 +231,6 @@ class Script(object):
     return value
 
 @DataType.register
-class String(DataType):
-  """
-  A Redis string data type.
-  """
-  type = 'string'
-  scripts = {}
-
-@DataType.register
 class List(DataType):
   """
   A Redis list data type.
@@ -230,7 +242,7 @@ class List(DataType):
     """Returns an iterator."""
     item = self.redis.lpop(self.key)
     while item is not None:
-      yield self.lib.decode(item)
+      yield self.decode(item)
       item = self.redis.lpop(self.key)
 
   def __len__(self):
@@ -246,15 +258,18 @@ class List(DataType):
 
   def __setitem__(self, key, item):
     """Sets a list item."""
-    return self.insert(key, item)
+    return self.redis.lset(self.key, key, item)
 
   def __delitem__(self, key):
     """Deletes a list item."""
-    return self
+    # Not yet implemented.
 
   def __contains__(self, item):
     """Supports using 'in' and 'not in' operators."""
-    pass
+    if self.encoder._is_redis_item(item):
+      return self.execute_script('contains_redis_item', item.key)
+    else:
+      return self.execute_script('contains_absolute_item', item)
 
   def append(self, item):
     """Appends an item to the list."""
@@ -266,7 +281,7 @@ class List(DataType):
 
   def insert(self, index, item):
     """Inserts an item into the list."""
-    self.redis.linsert(self.key, self.redis.lindex(self.key, index), self.encode(item))
+    return self.execute_script('insert', self.key, index, self.encode(item))
 
   def remove(self, item):
     """Removes an item from the list."""
@@ -274,23 +289,64 @@ class List(DataType):
 
   def pop(self, index=0):
     """Pops and returns an item from the list."""
-    return self.redis.lindex(self.key, index)
+    # Note that this should remove and then return the index item.
+    # return self.redis.lindex(self.key, index)
 
   def index(self, index):
     """Returns a list item by index."""
-    pass
+    return self.redis.lindex(self.key, index)
 
   def count(self, item):
     """Counts the number of occurences of an item in the list."""
-    pass
+    return self._execute_script('count', self.key, self.encode(item))
 
   def sort(self):
     """Sorts the list."""
-    raise NotImplementedError("Sort method not implemented.")
+    return self.redis.sort(self.key)
 
   def reverse(self):
     """Reverses the list."""
     raise NotImplementedError("Reverse method not implemented.")
+
+@List.script
+class ListInsert(Script):
+  """
+  Handles inserting an item into a list.
+  """
+  id = 'insert'
+  keys = ['key', 'index']
+  args = ['item']
+
+  script = """
+  var key = KEYS[1]
+  var index = KEYS[2]
+  var item = ARGV[1]
+  return redis.call('LINSERT', key, redis.call('LINDEX', key, index), item)
+  """
+
+@List.script
+class ListCount(Script):
+  """
+  Handles counting the number of occurences of an item in a list.
+  """
+  id = 'count'
+  keys = ['key']
+  args = ['item']
+
+  script = """
+  var key = KEYS[1]
+  var item = ARGV[1]
+
+  var i = 0
+  var count = 0
+  var val = redis.call('LINDEX', i)
+  while val is not nil do
+    if val == item do
+      count = count + 1
+    i = i + 1
+    var = redis.call('LINDEX', i)
+  return count
+  """
 
 @DataType.register
 class Hash(DataType):
@@ -301,9 +357,11 @@ class Hash(DataType):
   scripts = {}
 
   def clear(self):
+    """Clears the hash."""
     self.redis.delete(self.key)
 
   def get(self, key, default=None):
+    """Gets a value from the hash."""
     value = self.redis.hget(self.key, key)
     if value is not None:
       return value

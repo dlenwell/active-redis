@@ -1,5 +1,5 @@
 from .exception import DataTypeError, EncodingError
-import uuid
+import uuid, json
 
 class Encoder(object):
   """
@@ -136,11 +136,11 @@ class DataType(object):
 
   def expire(self, expiration=None):
     """Sets the data type to expire."""
-    self.redis.pexpire(self.key, expiration)
+    # self.redis.pexpire(self.key, expiration)
 
   def persist(self):
     """Removes an expiration from the data type."""
-    self.redis.persist(self.key)
+    # self.redis.persist(self.key)
 
   def delete(self):
     """Deletes the data type."""
@@ -245,14 +245,14 @@ class List(DataType):
 
   def __getitem__(self, key):
     """Gets a list item."""
-    value = self.redis.lindex(key)
-    if value is None:
+    item = self.redis.lindex(key)
+    if item is None:
       raise KeyError("Key %s does not exist." % (key,))
-    return value
+    return self.decode(item)
 
   def __setitem__(self, key, item):
     """Sets a list item."""
-    return self.redis.lset(self.key, key, item)
+    return self.redis.lset(self.key, key, self.encode(item))
 
   def __delitem__(self, key):
     """Deletes a list item."""
@@ -261,9 +261,9 @@ class List(DataType):
   def __contains__(self, item):
     """Supports using 'in' and 'not in' operators."""
     if self.encoder._is_redis_item(item):
-      return self.execute_script('contains_redis_item', item.key)
+      return self.execute_script('contains_redis_item', self.encode(item))
     else:
-      return self.execute_script('contains_absolute_item', item)
+      return self.execute_script('contains_absolute_item', self.encode(item))
 
   def append(self, item):
     """Appends an item to the list."""
@@ -271,7 +271,7 @@ class List(DataType):
 
   def extend(self, items):
     """Extends the list."""
-    self.redis.rpush(*items)
+    self.redis.rpush(*[self.encode(item) for item in items])
 
   def insert(self, index, item):
     """Inserts an item into the list."""
@@ -288,7 +288,11 @@ class List(DataType):
 
   def index(self, index):
     """Returns a list item by index."""
-    return self.redis.lindex(self.key, index)
+    item = self.redis.lindex(self.key, index)
+    if item is not None:
+      return self.decode(item)
+    else:
+      raise IndexError("Index out of range.")
 
   def count(self, item):
     """Counts the number of occurences of an item in the list."""
@@ -296,7 +300,8 @@ class List(DataType):
 
   def sort(self):
     """Sorts the list."""
-    return self.redis.sort(self.key)
+    self.redis.sort(self.key)
+    return self
 
   def reverse(self):
     """Reverses the list."""
@@ -358,9 +363,9 @@ class Hash(DataType):
 
   def get(self, key, default=None):
     """Gets a value from the hash."""
-    value = self.redis.hget(self.key, key)
-    if value is not None:
-      return value
+    item = self.redis.hget(self.key, key)
+    if item is not None:
+      return self.decode(item)
     return default
 
   def has_key(self, key):
@@ -369,12 +374,12 @@ class Hash(DataType):
 
   def items(self):
     """Returns all hash items."""
-    return self.redis.hgetall(self.key).items()
+    return [(key, self.decode(item)) for key, item in self.redis.hgetall(self.key).items()]
 
   def iteritems(self):
     """Returns an iterator over hash items."""
     for key in self.redis.hkeys(self.key):
-      yield key, self.redis.hget(self.key, key)
+      yield key, self.decode(self.redis.hget(self.key, key))
 
   def keys(self):
     """Returns all hash keys."""
@@ -386,18 +391,18 @@ class Hash(DataType):
 
   def values(self):
     """Returns all hash values."""
-    return self.redis.hvals(self.key)
+    return [self.decode(item) for item in self.redis.hvals(self.key)]
 
   def itervalues(self):
     """Returns an iterator over hash values."""
     for key in self.redis.hkeys(self.key):
-      yield self.redis.hget(self.key, key)
+      yield self.decode(self.redis.hget(self.key, key))
 
   def pop(self, key, *args):
     """Pops a value from the dictionary."""
-    value = self.redis.hget(self.key, key)
-    if value is not None:
-      return value
+    item = self.redis.hget(self.key, key)
+    if item is not None:
+      return self.decode(item)
     else:
       try:
         return args[0]
@@ -420,11 +425,15 @@ class Hash(DataType):
 
   def __getitem__(self, key):
     """Gets a hash item."""
-    return self.redis.hget(self.key, key)
+    item = self.redis.hget(self.key, key)
+    if item is not None:
+      return self.decode(item)
+    else:
+      raise KeyError("Hash key %s not found." % (key,))
 
-  def __setitem__(self, key, value):
+  def __setitem__(self, key, item):
     """Sets a hash item."""
-    return self.redis.hset(self.key, key, value)
+    return self.redis.hset(self.key, key, self.encode(item))
 
   def __delitem__(self, key):
     """Deletes an item from the hash."""
@@ -485,7 +494,7 @@ class Set(DataType):
     if item is None:
       raise KeyError("Set is empty.")
     else:
-      return item
+      return self.decode(item)
 
   def clear(self):
     """Clears all items from the set."""
@@ -493,69 +502,79 @@ class Set(DataType):
 
   def update(self, other):
     """Updates items in the set with items from 'other'."""
-    self._execute_script('update', self.key, [self.encode(item) for item in other])
+    self.redis.sadd(self.key, [self.encode(item) for item in other])
 
   def union(self, other):
     """Performs a union on two sets."""
-    newkey = self._create_unique_key()
-    self.redis.sunionstore(newkey, self.key, other.key)
-    return DataType.get_handler(self.type)(self.redis, newkey)
+    newset = DataType.get_handler(self.type)(self.redis)
+    if self.encoder._is_redis_item(other):
+      self.redis.sunionstore(newset.key, self.key, other.key)
+    else:
+      self._execute_script('union_struct', newset.key, self.key, self._create_unique_key(), [self.encode(item) for item in other])
+    return newset
 
   def intersection(self, other):
     """Performs an intersection on two sets."""
-    newkey = self._create_unique_key()
-    self.redis.sinterstore(newkey, self.key, other.key)
-    return DataType.get_handler(self.type)(self.redis, newkey)
+    newset = DataType.get_handler(self.type)(self.redis)
+    if self.encoder._is_redis_item(other):
+      self.redis.sinterstore(newset.key, self.key, other.key)
+    else:
+      self._execute_script('intersection_struct', newset.key, self.key, self._create_unique_key(), [self.encode(item) for item in other])
+    return newset
 
   def intersection_update(self, other):
     """Updates the set via intersection."""
-    self.redis.sinterstore(self.key, self.key, other.key)
+    if self.encoder._is_redis_item(other):
+      self.redis.sinterstore(self.key, self.key, other.key)
+    else:
+      self._execute_script('intersection_struct', self.key, self.key, self._create_unique_key(), [self.encode(item) for item in other])
+    return self
 
   def difference(self, other):
     """Performs a diff on two sets."""
     newset = DataType.get_handler(self.type)(self.redis)
-    self.redis.sdiffstore(newset.key, self.key, other.key)
+    if self.encoder._is_redis_item(other):
+      self.redis.sdiffstore(newset.key, self.key, other.key)
+    else:
+      self._execute_script('difference_struct', newset.key, self.key, self._create_unique_key(), [self.encode(item) for item in other])
     return newset
 
   def symmetric_difference(self, other):
     """Returns a set of elements on one set or the other."""
+    # Remember to check whether 'other' is a Redis set or normal Python set.
     newset = DataType.get_handler(self.type)(self.redis)
-    for item in self:
-      if item not in other:
-        newset.add(item)
-    for item in other:
-      if item not in self:
-        newset.add(item)
+    if self.encoder._is_redis_item(other):
+      self._execute_script('symmetric_difference_redis', newset.key, self.key, other.key)
+    else:
+      self._execute_script('symmetric_difference_struct', newset.key, self.key, self._create_unique_key(), [self.encode(item) for item in other])
     return newset
 
   def symmetric_difference_update(self, other):
     """Updates the set via symmetric difference."""
-    for item in self:
-      if item in other:
-        self.remove(item)
-    for item in other:
-      if item in self:
-        self.remove(item)
+    if self.encoder._is_redis_item(other):
+      self._execute_script('symmetric_difference_redis', self.key, self.key, other.key)
+    else:
+      self._execute_script('symmetric_difference_struct', self.key, self.key, self._create_unique_key(), [self.encode(item) for item in other])
     return self
 
   def issubset(self, other):
     """Returns a boolean indicating whether every element in the set is in 'other'."""
-    for item in self:
-      if item not in other:
-        return False
-    return True
+    if self.encoder._is_redis_item(other):
+      return self._execute_script('subset_redis', self.key, other.key)
+    else:
+      return self._execute_script('subset_struct', self.key, [self.encode(item) for item in other])
 
   def issuperset(self, other):
     """Returns a boolean indicating whether every element in 'other' is in the set."""
-    for item in other:
-      if item not in self:
-        return False
-    return True
+    if self.encoder._is_redis_item(other):
+      return self._execute_script('superset_redis', self.key, other.key)
+    else:
+      return self._execute_script('superset_struct', self.key, [self.encode(item) for item in other])
 
   def copy(self):
     """Copies the set."""
-    newset = self.lib.set()
-    self.lib.redis.sunionstore(newset.key, self.key)
+    newset = DataType.get_handler(self.type)(self.redis)
+    self.redis.sunionstore(newset.key, self.key)
     return newset
 
   def __len__(self):
@@ -564,15 +583,12 @@ class Set(DataType):
 
   def __iter__(self):
     """Returns an iterator over the set."""
-    item = self.redis.srandmember(self.key)
-    while item is not None:
-      yield item
-      self.redis.srem(item)
-      item = self.redis.srandmember(self.key)
+    items = self.redis.smembers(self.key)
+    return iter(set([self.decode(item) for item in items]))
 
   def __contains__(self, item):
     """Supports the 'in' and 'not in' operators."""
-    return self.redis.sismember(self.key, item)
+    return self.redis.sismember(self.key, self.encode(item))
 
   def __le__(self, other):
     """Alias for determining whether the set is a subset of 'other'."""
@@ -615,23 +631,197 @@ class Set(DataType):
     return self.symmetric_difference_update(other)
 
 @Set.script
-class SetUpdate(Script):
+class SetUnionStruct(Script):
   """
-  Updates a set.
+  Performs a union on one Redis struct and one Python struct.
   """
-  keys = ['key']
+  id = 'union_struct'
+  keys = ['newset', 'set1', 'set2']
+  variable_args = True
+
+  script = """
+  local newset = KEYS[1]
+  local set1 = KEYS[2]
+  local set2 = KEYS[3]
+
+  local set2args = ARGV
+
+  if #set2args > 2 then
+    redis.call('SADD', set2, unpack(set2args))
+  end
+
+  redis.call('SUNIONSTORE', newset, set1, set2)
+  redis.call('DEL', set2)
+  """
+
+@Set.script
+class SetIntersectStruct(Script):
+  """
+  Performs an intersection on one Redis struct and one Python struct.
+  """
+  id = 'intersection_struct'
+  keys = ['newset', 'set1', 'set2']
+  variable_args = True
+
+  script = """
+  local newset = KEYS[1]
+  local set1 = KEYS[2]
+  local set2 = KEYS[3]
+
+  local set2args = ARGV
+
+  if #set2args > 2 then
+    redis.call('SADD', set2, unpack(set2args))
+  end
+
+  redis.call('SINTERSTORE', newset, set1, set2)
+  redis.call('DEL', set2)
+  """
+
+@Set.script
+class SetDiffStruct(Script):
+  """
+  Performs an intersection on one Redis struct and one Python struct.
+  """
+  id = 'difference_struct'
+  keys = ['newset', 'set1', 'set2']
+  variable_args = True
+
+  script = """
+  local newset = KEYS[1]
+  local set1 = KEYS[2]
+  local set2 = KEYS[3]
+
+  local set2args = ARGV
+
+  if #set2args > 2 then
+    redis.call('SADD', set2, unpack(set2args))
+  end
+
+  redis.call('SDIFFSTORE', newset, set1, set2)
+  redis.call('DEL', set2)
+  """
+
+@Set.script
+class SetSymmetricDifferenceRedis(Script):
+  """
+  Returns a set of elements in one set or the other but not both.
+  """
+  id = 'symmetric_difference_redis'
+  keys = ['newset', 'set1', 'set2']
+
+  script = """
+  local newset = KEYS[1]
+  local set1 = KEYS[2]
+  local set2 = KEYS[3]
+
+  local set1diff = set1 .. ":diff"
+  local set2diff = set2 .. ":diff"
+  redis.call('SDIFFSTORE', set1diff, set1, set2)
+  redis.call('SDIFFSTORE', set2diff, set2, set1)
+  redis.call('SUNIONSTORE', newset, set1diff, set2diff)
+  redis.call('DEL', set1diff, set2diff)
+  """
+
+@Set.script
+class SetSymmetricDifferenceStruct(Script):
+  """
+  Returns a set of elements in one set or the other but not both.
+  """
+  id = 'symmetric_difference_struct'
+  keys = ['newset', 'set1', 'set2']
   args = []
   variable_args = True
 
   script = """
-  var key = KEYS[1]
-  var items = ARGV
+  local newset = KEYS[1]
+  local set1 = KEYS[2]
+  local set2 = KEYS[3]
 
-  for i = 1, #items do
-    if not redis.call('SISMEMBER', key, items[i]) then
-      redis.call('SADD', key, items[i])
-    end
+  -- Add set 2 items.
+  local set2args = ARGV
+  if #set2args > 0 then
+    redis.call('SADD', set2, unpack(set2args))
   end
+
+  local set1diff = set1 .. ":diff"
+  local set2diff = set2 .. ":diff"
+  redis.call('SDIFFSTORE', set1diff, set1, set2)
+  redis.call('SDIFFSTORE', set2diff, set2, set1)
+  redis.call('SUNIONSTORE', newset, set1diff, set2diff)
+  redis.call('DEL', set1diff, set2diff, set2) -- Set 2 is automatically deleted as well.
+  """
+
+@Set.script
+class SetSubsetRedis(Script):
+  """
+  Returns a boolean indicating whether a set is a subset of set1.
+  """
+  id = 'subset_redis'
+  keys = ['set1', 'set2']
+
+  script = """
+  local set1 = KEYS[1]
+  local set2 = KEYS[2]
+
+  return #redis.call('SDIFF', set1, set2) == 0
+  """
+
+@Set.script
+class SetSubsetStruct(Script):
+  """
+  Returns a boolean indicating whether a set is a subset of set1.
+  """
+  id = 'subset_struct'
+  keys = ['set1']
+  variable_args = True
+
+  script = """
+  local set1 = KEYS[1]
+  local args = ARGV
+
+  local tempset = set1 .. ':temp'
+  redis.call('SADD', tempset, unpack(args))
+
+  local count = #redis.call('SDIFF', set1, tempset)
+  redis.call('DEL', diffset)
+  return count == 0
+  """
+
+@Set.script
+class SetSupersetRedis(Script):
+  """
+  Returns a boolean indicating whether a set is a superset of set1.
+  """
+  id = 'superset_redis'
+  keys = ['set1', 'set2']
+
+  script = """
+  local set1 = KEYS[1]
+  local set2 = KEYS[2]
+
+  return #redis.call('SDIFF', set2, set1) == 0
+  """
+
+@Set.script
+class SetSupersetStruct(Script):
+  """
+  Returns a boolean indicating whether a set is a superset of set1.
+  """
+  id = 'superset_struct'
+  keys = ['set1']
+  variable_args = True
+
+  script = """
+  local set1 = KEYS[1]
+  local args = ARGV
+
+  local tempset = set1 .. ':temp'
+  redis.call('SADD', tempset, unpack(args))
+
+  local count = #redis.call('SDIFF', tempset, set1)
+  redis.call('DEL', tempset)
+  return count == 0
   """
 
 @DataType.register

@@ -13,3 +13,8 @@ class DataTypeError(ActiveRedisError):
   """
   Generic data type error.
   """
+
+class ScriptError(ActiveRedisError):
+  """
+  Script error.
+  """

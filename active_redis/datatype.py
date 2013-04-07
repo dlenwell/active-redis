@@ -1,4 +1,5 @@
-from .exception import DataTypeError, EncodingError
+from .exception import DataTypeError, EncodingError, ScriptError
+from redis.exceptions import ResponseError
 import uuid, json
 
 class Encoder(object):
@@ -196,7 +197,7 @@ class Script(object):
           keys.append(args[current_index])
           current_index += 1
         except IndexError:
-            raise ScriptError('Invalid arguments for script %s.' % (self.name,))
+            raise ScriptError('Invalid arguments for script %s.' % (self.id,))
 
     arguments = []
     for arg in self.args:
@@ -207,7 +208,7 @@ class Script(object):
           arguments.append(args[current_index])
           current_index += 1
         except IndexError:
-            raise ScriptError('Invalid arguments for script %s.' % (self.name,))
+            raise ScriptError('Invalid arguments for script %s.' % (self.id,))
 
     keys, arguments = self.prepare(keys, arguments)
     return self.process(self.script(keys=keys, args=arguments, client=self.redis))
@@ -247,7 +248,7 @@ class List(DataType):
     """Gets a list item."""
     item = self.redis.lindex(key)
     if item is None:
-      raise KeyError("Key %s does not exist." % (key,))
+      raise IndexError("Index out of range.")
     return self.decode(item)
 
   def __setitem__(self, key, item):
@@ -256,14 +257,14 @@ class List(DataType):
 
   def __delitem__(self, key):
     """Deletes a list item."""
-    # Not yet implemented.
+    try:
+      return self._execute_script('delete', self.key, key)
+    except ResponseError:
+      raise IndexError("Index out of range.")
 
   def __contains__(self, item):
     """Supports using 'in' and 'not in' operators."""
-    if self.encoder._is_redis_item(item):
-      return self.execute_script('contains_redis_item', self.encode(item))
-    else:
-      return self.execute_script('contains_absolute_item', self.encode(item))
+    return self._execute_script('contains', self.key, self.encode(item))
 
   def append(self, item):
     """Appends an item to the list."""
@@ -333,20 +334,63 @@ class ListCount(Script):
   args = ['item']
 
   script = """
-  var key = KEYS[1]
-  var item = ARGV[1]
+  local key = KEYS[1]
+  local item = ARGV[1]
 
-  var i = 0
-  var count = 0
-  var val = redis.call('LINDEX', i)
-  while val is not nil do
-    if val == item do
+  local i = 0
+  local count = 0
+  local val = redis.call('LINDEX', i)
+  while val do
+    if val == item then
       count = count + 1
     end
     i = i + 1
-    var = redis.call('LINDEX', i)
+    val = redis.call('LINDEX', i)
   end
   return count
+  """
+
+@List.script
+class ListContains(Script):
+  """
+  Indicates whether the list contains an object.
+  """
+  id = 'contains'
+  keys = ['key']
+  args = ['item']
+
+  script = """
+  local key = KEYS[1]
+  local item = ARGV[1]
+
+  local i = 0
+  local val = redis.call('LINDEX', key, i)
+  while val do
+    if val == item then
+      return true
+    end
+    i = i + 1
+    val = redis.call('LINDEX', key, i)
+  end
+  return false
+  """
+
+@List.script
+class ListDelete(Script):
+  """
+  Deletes an item from a list by index.
+  """
+  id = 'delete'
+  keys = ['key']
+  args = ['index']
+
+  script = """
+  local key = KEYS[1]
+  local index = ARGV[1]
+
+  local delval = '____delete____'
+  redis.call('LSET', key, index, delval)
+  redis.call('LREM', key, 1, delval)
   """
 
 @DataType.register
@@ -448,6 +492,7 @@ class HashSetDefault(Script):
   """
   Sets the value or default value of a hash item.
   """
+  id = 'setdefault'
   keys = ['key', 'field']
   args = ['default']
 

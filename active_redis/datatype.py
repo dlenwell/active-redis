@@ -13,7 +13,7 @@ class Encoder(object):
 
   def encode(self, item):
     """Encodes a Python object."""
-    if self._is_redis(item):
+    if self._is_redis_item(item):
       return self._encode_redis_item(item)
     else:
       return self._encode_structure_item(item)
@@ -115,8 +115,9 @@ class DataType(object):
 
   def __setattr__(self, name, value):
     """Allows the data type key to be changed."""
-    if name == 'key':
-      self.rename(value)
+    if name == 'key' and hasattr(self, 'key'):
+      self.redis.rename(self.key, value)
+    object.__setattr__(self, name, value)
 
   def _load_script(self, id):
     """Loads a server-side Lua script."""
@@ -140,13 +141,6 @@ class DataType(object):
   def persist(self):
     """Removes an expiration from the data type."""
     self.redis.persist(self.key)
-
-  def rename(self, key=None):
-    """Renames the key."""
-    oldkey = self.key
-    self.key = key or self._create_unique_key()
-    self.redis.rename(oldkey, self.key)
-    return self.key
 
   def delete(self):
     """Deletes the data type."""
@@ -343,8 +337,10 @@ class ListCount(Script):
   while val is not nil do
     if val == item do
       count = count + 1
+    end
     i = i + 1
     var = redis.call('LINDEX', i)
+  end
   return count
   """
 
@@ -368,30 +364,37 @@ class Hash(DataType):
     return default
 
   def has_key(self, key):
+    """Indicates whether the given key exists."""
     return self.redis.hexists(self.key, key)
 
   def items(self):
-    items = []
-    for key in self.redis.hkeys(self.key):
-      items.append((key, self.redis.hget(self.key, key)))
-    return items
+    """Returns all hash items."""
+    return self.redis.hgetall(self.key).items()
 
   def iteritems(self):
+    """Returns an iterator over hash items."""
     for key in self.redis.hkeys(self.key):
       yield key, self.redis.hget(self.key, key)
 
+  def keys(self):
+    """Returns all hash keys."""
+    return self.redis.hkeys(self.key)
+
   def iterkeys(self):
-    for key in self.redis.hkeys(self.key):
-      yield key
+    """Returns an iterator over hash keys."""
+    return iter(self.redis.hkeys(self.key))
+
+  def values(self):
+    """Returns all hash values."""
+    return self.redis.hvals(self.key)
 
   def itervalues(self):
+    """Returns an iterator over hash values."""
     for key in self.redis.hkeys(self.key):
       yield self.redis.hget(self.key, key)
 
-  def keys(self):
-    return self.redis.hkeys(self.key)
-
   def pop(self, key, *args):
+    """Pops a value from the dictionary."""
     value = self.redis.hget(self.key, key)
     if value is not None:
       return value
@@ -405,32 +408,53 @@ class Hash(DataType):
     pass
 
   def setdefault(self, key, default=None):
-    if self.redis.hexists(self.key, key):
-      return self.redis.hget(self.key, key)
-    else:
-      self.redis.hset(self.key, key, default)
-      return default
-
-  def values(self):
-    return self.redis.hvals(self.key)
+    """Sets a hash item value or default value."""
+    return self._execute_script('setdefault', self.key, key, default)
 
   def __len__(self):
     return self.redis.hlen(self.key)
 
   def __iter__(self):
-    return iter(self.redis.hkeys(self.key))
+    """Iterates over hash keys."""
+    return self.iterkeys()
 
   def __getitem__(self, key):
+    """Gets a hash item."""
     return self.redis.hget(self.key, key)
 
   def __setitem__(self, key, value):
+    """Sets a hash item."""
     return self.redis.hset(self.key, key, value)
 
   def __delitem__(self, key):
+    """Deletes an item from the hash."""
     return self.redis.hdel(self.key, key)
 
   def __contains__(self, key):
+    """Supports using 'in' and 'not in' operators."""
     return self.has_key(key)
+
+@Hash.script
+class HashSetDefault(Script):
+  """
+  Sets the value or default value of a hash item.
+  """
+  keys = ['key', 'field']
+  args = ['default']
+
+  script = """
+  var key = KEYS[1]
+  var field = KEYS[2]
+
+  var exists = redis.call('HEXISTS', key, field)
+  if exists then
+    return redis.call('HGET', key, field)
+  else
+    var default = ARGV[1]
+    redis.call('HSET', key, field, default)
+    return default
+  end
+  """
 
 @DataType.register
 class Set(DataType):
@@ -442,18 +466,18 @@ class Set(DataType):
 
   def add(self, item):
     """Adds an item to the set."""
-    self.redis.sadd(self.key, item)
+    self.redis.sadd(self.key, self.encode(item))
 
   def remove(self, item):
     """Removes an item from the set."""
     if item in self:
-      self.redis.srem(self.key, item)
+      self.redis.srem(self.key, self.encode(item))
     else:
       raise KeyError("Item not in set.")
 
   def discard(self, item):
     """Discards an item from the set."""
-    self.redis.srem(self.key, item)
+    self.redis.srem(self.key, self.encode(item))
 
   def pop(self):
     """Pops an item from the set."""
@@ -469,21 +493,19 @@ class Set(DataType):
 
   def update(self, other):
     """Updates items in the set with items from 'other'."""
-    for item in other:
-      if item not in self:
-        self.add(item)
+    self._execute_script('update', self.key, [self.encode(item) for item in other])
 
   def union(self, other):
     """Performs a union on two sets."""
     newkey = self._create_unique_key()
     self.redis.sunionstore(newkey, self.key, other.key)
-    return Set(self.redis, newkey)
+    return DataType.get_handler(self.type)(self.redis, newkey)
 
   def intersection(self, other):
     """Performs an intersection on two sets."""
     newkey = self._create_unique_key()
     self.redis.sinterstore(newkey, self.key, other.key)
-    return Set(self.redis, newkey)
+    return DataType.get_handler(self.type)(self.redis, newkey)
 
   def intersection_update(self, other):
     """Updates the set via intersection."""
@@ -491,13 +513,13 @@ class Set(DataType):
 
   def difference(self, other):
     """Performs a diff on two sets."""
-    newkey = self._create_unique_key()
-    self.redis.sdiffstore(newkey, self.key, other.key)
-    return Set(self.redis, newkey)
+    newset = DataType.get_handler(self.type)(self.redis)
+    self.redis.sdiffstore(newset.key, self.key, other.key)
+    return newset
 
   def symmetric_difference(self, other):
     """Returns a set of elements on one set or the other."""
-    newset = Set(self.redis, self._create_unique_key())
+    newset = DataType.get_handler(self.type)(self.redis)
     for item in self:
       if item not in other:
         newset.add(item)
@@ -591,6 +613,26 @@ class Set(DataType):
   def __ixor__(self, other):
     """Alias for performing a symmetric difference update."""
     return self.symmetric_difference_update(other)
+
+@Set.script
+class SetUpdate(Script):
+  """
+  Updates a set.
+  """
+  keys = ['key']
+  args = []
+  variable_args = True
+
+  script = """
+  var key = KEYS[1]
+  var items = ARGV
+
+  for i = 1, #items do
+    if not redis.call('SISMEMBER', key, items[i]) then
+      redis.call('SADD', key, items[i])
+    end
+  end
+  """
 
 @DataType.register
 class SortedSet(DataType):

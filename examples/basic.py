@@ -19,3 +19,16 @@ print 'money!' in otherlist
 
 mylist.append(otherlist)
 mylist.delete()
+
+myhash = aredis.hash()
+myhash['foo'] = 'foo'
+myhash['bar'] = 'bar'
+myhash['bar'] = 'baz'
+
+myset = aredis.set()
+myset.add('foo')
+print len(myset)
+
+myhash['baz'] = myset
+print len(myhash['baz'])
+myhash.delete()

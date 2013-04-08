@@ -46,10 +46,10 @@ class Encoder(object):
 
   def _decode_redis_value(self, value):
     """Decodes a Redis data type value."""
-    prefix, key = value.split(':', 1)
+    key = value[len(self.REDIS_STRUCTURE_PREFIX)+1:]
     type = self.redis.type(key)
-    if type is None:
-      raise EncodingError("Failed to decode value. Key %s does not exist.")
+    if type is None or type == 'none':
+      raise EncodingError("Failed to decode value. Key %s does not exist." % (key,))
     return DataType.get_handler(type)(self.redis, key)
 
   def _is_structure_value(self, value):
@@ -133,7 +133,7 @@ class DataType(object):
 
   def _create_unique_key(self):
     """Generates a unique Redis key."""
-    return uuid.uuid4()
+    return "%s:%s" % ('redis:type', uuid.uuid4())
 
   def expire(self, expiration=None):
     """Sets the data type to expire."""

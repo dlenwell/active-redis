@@ -66,6 +66,8 @@ class DataType(object):
   """
   handlers = {}
 
+  DATATYPE_PREFIX = 'redis:data'
+
   type = None
   scripts = None
 
@@ -133,7 +135,7 @@ class DataType(object):
 
   def _create_unique_key(self):
     """Generates a unique Redis key."""
-    return "%s:%s" % ('redis:type', uuid.uuid4())
+    return "%s:%s" % (self.DATATYPE_PREFIX, uuid.uuid4())
 
   def expire(self, expiration=None):
     """Sets the data type to expire."""
@@ -890,7 +892,8 @@ class StructureDelete(Script):
 
   script = """
   local function is_redis_datatype(value)
-    return string.find(value, 'redis:struct') == 0
+    local i = string.find(value, 'redis:struct')
+    return i == 1
   end
 
   local function get_reference(value)
@@ -903,11 +906,16 @@ class StructureDelete(Script):
 
   local function delete_references(key)
     local type = get_type(key)
-    if type == 'list' then delete_list(key)
-    elseif type == 'hash' then delete_hash(key)
-    elseif type == 'set' then delete_set(key)
-    elseif type == 'sorted_set' then delete_sorted_set(key)
-    else redis.call('DEL', key)
+    if type == 'list' then
+      delete_list(key)
+    elseif type == 'hash' then
+      delete_hash(key)
+    elseif type == 'set' then
+      delete_set(key)
+    elseif type == 'sorted_set' then
+      delete_sorted_set(key)
+    else
+      redis.call('DEL', key)
     end
   end
 

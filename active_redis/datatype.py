@@ -248,7 +248,7 @@ class List(DataType):
 
   def __getitem__(self, key):
     """Gets a list item."""
-    item = self.redis.lindex(key)
+    item = self.redis.lindex(self.key, key)
     if item is None:
       raise IndexError("Index out of range.")
     return self.decode(item)

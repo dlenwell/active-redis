@@ -357,7 +357,7 @@ class List(DataType):
   def pop(self, index=0):
     """Pops and returns an item from the list."""
     # Note that this should remove and then return the index item.
-    # return self.redis.lindex(self.key, index)
+    return self._execute_script('pop', self.key, index)
 
   def index(self, index):
     """Returns a list item by index."""
@@ -390,10 +390,28 @@ class ListInsert(Script):
   args = ['item']
 
   script = """
-  var key = KEYS[1]
-  var index = KEYS[2]
-  var item = ARGV[1]
+  local key = KEYS[1]
+  local index = KEYS[2]
+  local item = ARGV[1]
   return redis.call('LINSERT', key, redis.call('LINDEX', key, index), item)
+  """
+
+@List.script
+class ListPop(Script):
+  """
+  Handles popping an item from a list.
+  """
+  id = 'pop'
+  keys = ['key']
+  args = ['index']
+
+  script = """
+  local key = KEYS[1]
+  local index = ARGV[1]
+  local item = redis.call('LINDEX', key, index)
+  redis.call('LSET', key, index, '____delete____')
+  redis.call('LREM', key, 0, '____delete____')
+  return item
   """
 
 @List.script

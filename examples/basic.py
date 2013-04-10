@@ -42,9 +42,9 @@ foohash['foo'] = []
 # Store a JSON serialized list ['bar'] at key 'foo_hash' field 'foo'.
 foohash['foo'] = ['bar']
 
-# Note that appending to the serialized list will not work, since
-# Active Redis currently does not have a way to know when the list
-# is updated. So this will not work.
+# Even once the list has been serialized, we can still append new
+# values to the list and it will be automatically re-serialized.
+# Active Redis internally wraps and monitors the list for changes.
 foohash['foo'].append('baz')
 
 # Create a new list with the key 'foo_list'.
@@ -54,16 +54,16 @@ foolist = activeredis.list('foo_list')
 # This will RPUSH an Active Redis reference to 'foo_hash'.
 foolist.append(foohash)
 
-print foolist[0]['foo'] # ['bar']
+print foolist[0]['foo'] # ['bar', 'baz']
 
 # We can load the objects using the same keys.
 del foohash
 foohash = activeredis.hash('foo_hash')
-print foohash['foo'] # ['bar']
+print foohash['foo'] # ['bar', 'baz']
 
 del foolist
 foolist = activeredis.list('foo_list')
-print foolist[0]['foo'] # ['bar']
+print foolist[0]['foo'] # ['bar', 'baz']
 
 # If we want to actually delete the keys, call the delete() method.
 # This will delete all referenced keys as well.

@@ -1,4 +1,5 @@
 from .exception import DataTypeError, EncodingError, ScriptError
+from .observer import Wrapper
 from redis.exceptions import ResponseError
 import uuid, json
 
@@ -14,6 +15,8 @@ class Encoder(object):
 
   def encode(self, item):
     """Encodes a Python object."""
+    if isinstance(item, Wrapper):
+      item = item.subject
     if self._is_redis_item(item):
       return self._encode_redis_item(item)
     else:
@@ -137,6 +140,13 @@ class DataType(object):
     """Generates a unique Redis key."""
     return "%s:%s" % (self.DATATYPE_PREFIX, uuid.uuid4())
 
+  def update_subject(self, subject, index):
+    """Notifies the data type of a subject update."""
+
+  def wrap(self, subject, index):
+    """Wraps an object."""
+    return Wrapper.wrap(subject, index, self)
+
   def expire(self, expiration=None):
     """Sets the data type to expire."""
     # self.redis.pexpire(self.key, expiration)
@@ -144,7 +154,6 @@ class DataType(object):
   def persist(self):
     """Removes an expiration from the data type."""
     # self.redis.persist(self.key)
-
 
   def is_redis_datatype(self, value):
     return value[:12] == 'redis:struct'
@@ -290,12 +299,18 @@ class List(DataType):
   type = 'list'
   scripts = {}
 
+  def update_subject(self, subject, index):
+    """Updates a list subject."""
+    self.__setitem__(index, subject)
+
   def __iter__(self):
     """Returns an iterator."""
-    item = self.redis.lpop(self.key)
+    i = 0
+    item = self.redis.lindex(self.key, i)
     while item is not None:
-      yield self.decode(item)
-      item = self.redis.lpop(self.key)
+      yield self.wrap(self.decode(item), i)
+      i += 1
+      item = self.redis.lindex(self.key, i)
 
   def __len__(self):
     """Supports the len() global function."""
@@ -306,7 +321,7 @@ class List(DataType):
     item = self.redis.lindex(self.key, key)
     if item is None:
       raise IndexError("Index out of range.")
-    return self.decode(item)
+    return self.wrap(self.decode(item), key)
 
   def __setitem__(self, key, item):
     """Sets a list item."""
@@ -333,7 +348,7 @@ class List(DataType):
 
   def insert(self, index, item):
     """Inserts an item into the list."""
-    return self.execute_script('insert', self.key, index, self.encode(item))
+    return self._execute_script('insert', self.key, index, self.encode(item))
 
   def remove(self, item):
     """Removes an item from the list."""
@@ -458,6 +473,10 @@ class Hash(DataType):
   type = 'hash'
   scripts = {}
 
+  def update_subject(self, subject, index):
+    """Updates a hash subject."""
+    self.__setitem__(index, subject)
+
   def clear(self):
     """Clears the hash."""
     self.redis.delete(self.key)
@@ -466,8 +485,8 @@ class Hash(DataType):
     """Gets a value from the hash."""
     item = self.redis.hget(self.key, key)
     if item is not None:
-      return self.decode(item)
-    return default
+      return self.wrap(self.decode(item), key)
+    return self.wrap(default, key)
 
   def has_key(self, key):
     """Indicates whether the given key exists."""
@@ -475,12 +494,12 @@ class Hash(DataType):
 
   def items(self):
     """Returns all hash items."""
-    return [(key, self.decode(item)) for key, item in self.redis.hgetall(self.key).items()]
+    return [(key, self.wrap(self.decode(item), key)) for key, item in self.redis.hgetall(self.key).items()]
 
   def iteritems(self):
     """Returns an iterator over hash items."""
     for key in self.redis.hkeys(self.key):
-      yield key, self.decode(self.redis.hget(self.key, key))
+      yield key, self.wrap(self.decode(self.redis.hget(self.key, key)), key)
 
   def keys(self):
     """Returns all hash keys."""
@@ -492,18 +511,18 @@ class Hash(DataType):
 
   def values(self):
     """Returns all hash values."""
-    return [self.decode(item) for item in self.redis.hvals(self.key)]
+    return [self.wrap(self.decode(self.redis.hget(self.key, key)), key) for key in self.redis.hkeys(self.key)]
 
   def itervalues(self):
     """Returns an iterator over hash values."""
     for key in self.redis.hkeys(self.key):
-      yield self.decode(self.redis.hget(self.key, key))
+      yield self.wrap(self.decode(self.redis.hget(self.key, key)), key)
 
   def pop(self, key, *args):
     """Pops a value from the dictionary."""
     item = self.redis.hget(self.key, key)
     if item is not None:
-      return self.decode(item)
+      return self.wrap(self.decode(item), key)
     else:
       try:
         return args[0]
@@ -528,7 +547,7 @@ class Hash(DataType):
     """Gets a hash item."""
     item = self.redis.hget(self.key, key)
     if item is not None:
-      return self.decode(item)
+      return self.wrap(self.decode(item), key)
     else:
       raise KeyError("Hash key %s not found." % (key,))
 

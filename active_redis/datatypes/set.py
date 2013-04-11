@@ -360,3 +360,6 @@ class Set(DataType):
   def __ixor__(self, other):
     """Alias for performing a symmetric difference update."""
     return self.symmetric_difference_update(other)
+
+  def __repr__(self):
+    return repr(set([item for item in self]))

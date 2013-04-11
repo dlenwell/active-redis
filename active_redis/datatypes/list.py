@@ -114,41 +114,6 @@ class List(DataType, Observer):
     """Updates a list subject."""
     self.__setitem__(index, subject)
 
-  def __iter__(self):
-    """Returns an iterator."""
-    i = 0
-    item = self.client.lindex(self.key, i)
-    while item is not None:
-      yield self.observe(self.client.decode(item), i)
-      i += 1
-      item = self.client.lindex(self.key, i)
-
-  def __len__(self):
-    """Supports the len() global function."""
-    return self.client.llen(self.key)
-
-  def __getitem__(self, key):
-    """Gets a list item."""
-    item = self.client.lindex(self.key, key)
-    if item is None:
-      raise IndexError("Index out of range.")
-    return self.observe(self.client.decode(item), key)
-
-  def __setitem__(self, key, item):
-    """Sets a list item."""
-    return self.client.lset(self.key, key, self.client.encode(item))
-
-  def __delitem__(self, key):
-    """Deletes a list item."""
-    try:
-      return self._execute_script('delete', self.key, key)
-    except ResponseError:
-      raise IndexError("Index out of range.")
-
-  def __contains__(self, item):
-    """Supports using 'in' and 'not in' operators."""
-    return self._execute_script('contains', self.key, self.client.encode(item))
-
   def append(self, item):
     """Appends an item to the list."""
     self.client.rpush(self.key, self.client.encode(item))
@@ -197,3 +162,41 @@ class List(DataType, Observer):
       if isinstance(item, DataType):
         item.delete()
     self.client.delete(self.key)
+
+  def __iter__(self):
+    """Returns an iterator."""
+    i = 0
+    item = self.client.lindex(self.key, i)
+    while item is not None:
+      yield self.observe(self.client.decode(item), i)
+      i += 1
+      item = self.client.lindex(self.key, i)
+
+  def __len__(self):
+    """Supports the len() global function."""
+    return self.client.llen(self.key)
+
+  def __getitem__(self, key):
+    """Gets a list item."""
+    item = self.client.lindex(self.key, key)
+    if item is None:
+      raise IndexError("Index out of range.")
+    return self.observe(self.client.decode(item), key)
+
+  def __setitem__(self, key, item):
+    """Sets a list item."""
+    return self.client.lset(self.key, key, self.client.encode(item))
+
+  def __delitem__(self, key):
+    """Deletes a list item."""
+    try:
+      return self._execute_script('delete', self.key, key)
+    except ResponseError:
+      raise IndexError("Index out of range.")
+
+  def __contains__(self, item):
+    """Supports using 'in' and 'not in' operators."""
+    return self._execute_script('contains', self.key, self.client.encode(item))
+
+  def __repr__(self):
+    return repr([item for item in self])

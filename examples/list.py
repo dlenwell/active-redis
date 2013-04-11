@@ -27,4 +27,7 @@ mylist.append('foo')
 del mylist
 
 mylist = redis.list('mylist')
-print mylist # ['foo']
+print mylist # [u'foo']
+
+mylist.delete()
+print mylist # []

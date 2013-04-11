@@ -1,6 +1,6 @@
 # Copyright (c) 2013 Jordan Halterman <jordan.halterman@gmail.com>
 # See LICENSE for details.
-from active_redis.core import DataType
+from active_redis.core import DataType, Script
 from active_redis.registry import DataType as Registry
 
 @Registry.register
@@ -9,7 +9,7 @@ class Hash(DataType):
   A Redis hash data type.
   """
   type = 'hash'
-  scripts = {}
+  _scripts = {'set_default': SetDefault}
 
   def update_subject(self, subject, index):
     """Updates a hash subject."""
@@ -101,12 +101,10 @@ class Hash(DataType):
     """Supports using 'in' and 'not in' operators."""
     return self.has_key(key)
 
-@Hash.script
-class HashSetDefault(Script):
+class SetDefault(Script):
   """
   Sets the value or default value of a hash item.
   """
-  id = 'setdefault'
   keys = ['key', 'field']
   args = ['default']
 

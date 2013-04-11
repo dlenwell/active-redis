@@ -1,6 +1,6 @@
 # Copyright (c) 2013 Jordan Halterman <jordan.halterman@gmail.com>
 # See LICENSE for details.
-from active_redis.core import DataType
+from active_redis.core import DataType, Script
 from active_redis.registry import DataType as Registry
 
 @Registry.register
@@ -9,7 +9,17 @@ class Set(DataType):
   A Redis set data type.
   """
   type = 'set'
-  scripts = {}
+  _scripts = {
+    'union_struct': UnionStruct,
+    'intersect_struct': IntersectStruct,
+    'difference_struct': DifferenceStruct,
+    'symmetric_difference_redis': SymmetricDifferenceRedis,
+    'symmetric_difference_struct': SymmetricDifferenceStruct,
+    'subset_redis': SubsetRedis,
+    'subset_struct': SubsetStruct,
+    'superset_redis': SupersetRedis,
+    'superset_struct': SupersetStruct,
+  }
 
   def add(self, item):
     """Adds an item to the set."""
@@ -168,12 +178,10 @@ class Set(DataType):
     """Alias for performing a symmetric difference update."""
     return self.symmetric_difference_update(other)
 
-@Set.script
-class SetUnionStruct(Script):
+class UnionStruct(Script):
   """
   Performs a union on one Redis struct and one Python struct.
   """
-  id = 'union_struct'
   keys = ['newset', 'set1', 'set2']
   variable_args = True
 
@@ -192,12 +200,10 @@ class SetUnionStruct(Script):
   redis.call('DEL', set2)
   """
 
-@Set.script
-class SetIntersectStruct(Script):
+class IntersectStruct(Script):
   """
   Performs an intersection on one Redis struct and one Python struct.
   """
-  id = 'intersection_struct'
   keys = ['newset', 'set1', 'set2']
   variable_args = True
 
@@ -216,12 +222,10 @@ class SetIntersectStruct(Script):
   redis.call('DEL', set2)
   """
 
-@Set.script
-class SetDiffStruct(Script):
+class DiffStruct(Script):
   """
   Performs an intersection on one Redis struct and one Python struct.
   """
-  id = 'difference_struct'
   keys = ['newset', 'set1', 'set2']
   variable_args = True
 
@@ -240,12 +244,10 @@ class SetDiffStruct(Script):
   redis.call('DEL', set2)
   """
 
-@Set.script
-class SetSymmetricDifferenceRedis(Script):
+class SymmetricDifferenceRedis(Script):
   """
   Returns a set of elements in one set or the other but not both.
   """
-  id = 'symmetric_difference_redis'
   keys = ['newset', 'set1', 'set2']
 
   script = """
@@ -261,12 +263,10 @@ class SetSymmetricDifferenceRedis(Script):
   redis.call('DEL', set1diff, set2diff)
   """
 
-@Set.script
-class SetSymmetricDifferenceStruct(Script):
+class SymmetricDifferenceStruct(Script):
   """
   Returns a set of elements in one set or the other but not both.
   """
-  id = 'symmetric_difference_struct'
   keys = ['newset', 'set1', 'set2']
   args = []
   variable_args = True
@@ -290,12 +290,10 @@ class SetSymmetricDifferenceStruct(Script):
   redis.call('DEL', set1diff, set2diff, set2) -- Set 2 is automatically deleted as well.
   """
 
-@Set.script
-class SetSubsetRedis(Script):
+class SubsetRedis(Script):
   """
   Returns a boolean indicating whether a set is a subset of set1.
   """
-  id = 'subset_redis'
   keys = ['set1', 'set2']
 
   script = """
@@ -305,12 +303,10 @@ class SetSubsetRedis(Script):
   return #redis.call('SDIFF', set1, set2) == 0
   """
 
-@Set.script
-class SetSubsetStruct(Script):
+class SubsetStruct(Script):
   """
   Returns a boolean indicating whether a set is a subset of set1.
   """
-  id = 'subset_struct'
   keys = ['set1']
   variable_args = True
 
@@ -326,12 +322,10 @@ class SetSubsetStruct(Script):
   return count == 0
   """
 
-@Set.script
-class SetSupersetRedis(Script):
+class SupersetRedis(Script):
   """
   Returns a boolean indicating whether a set is a superset of set1.
   """
-  id = 'superset_redis'
   keys = ['set1', 'set2']
 
   script = """
@@ -341,12 +335,10 @@ class SetSupersetRedis(Script):
   return #redis.call('SDIFF', set2, set1) == 0
   """
 
-@Set.script
-class SetSupersetStruct(Script):
+class SupersetStruct(Script):
   """
   Returns a boolean indicating whether a set is a superset of set1.
   """
-  id = 'superset_struct'
   keys = ['set1']
   variable_args = True
 

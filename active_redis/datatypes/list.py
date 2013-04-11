@@ -1,6 +1,6 @@
 # Copyright (c) 2013 Jordan Halterman <jordan.halterman@gmail.com>
 # See LICENSE for details.
-from active_redis.core import DataType
+from active_redis.core import DataType, Script
 from active_redis.registry import DataType as Registry
 
 @Registry.register
@@ -9,7 +9,13 @@ class List(DataType):
   A Redis list data type.
   """
   type = 'list'
-  scripts = {}
+  _scripts = {
+    'insert': ListInsert,
+    'pop': ListPop,
+    'count': ListCount,
+    'contains': ListContains,
+    'delete': ListDelete,
+  }
 
   def update_subject(self, subject, index):
     """Updates a list subject."""
@@ -92,12 +98,10 @@ class List(DataType):
     """Reverses the list."""
     raise NotImplementedError("Reverse method not implemented.")
 
-@List.script
 class ListInsert(Script):
   """
   Handles inserting an item into a list.
   """
-  id = 'insert'
   keys = ['key', 'index']
   args = ['item']
 
@@ -108,12 +112,10 @@ class ListInsert(Script):
   return redis.call('LINSERT', key, redis.call('LINDEX', key, index), item)
   """
 
-@List.script
 class ListPop(Script):
   """
   Handles popping an item from a list.
   """
-  id = 'pop'
   keys = ['key']
   args = ['index']
 
@@ -126,12 +128,10 @@ class ListPop(Script):
   return item
   """
 
-@List.script
 class ListCount(Script):
   """
   Handles counting the number of occurences of an item in a list.
   """
-  id = 'count'
   keys = ['key']
   args = ['item']
 
@@ -152,12 +152,10 @@ class ListCount(Script):
   return count
   """
 
-@List.script
 class ListContains(Script):
   """
   Indicates whether the list contains an object.
   """
-  id = 'contains'
   keys = ['key']
   args = ['item']
 
@@ -177,12 +175,10 @@ class ListContains(Script):
   return false
   """
 
-@List.script
 class ListDelete(Script):
   """
   Deletes an item from a list by index.
   """
-  id = 'delete'
   keys = ['key']
   args = ['index']
 

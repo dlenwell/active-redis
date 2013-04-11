@@ -49,9 +49,9 @@ class Dict(DataType, Observer):
   type = 'dict'
   _scripts = {'set_default': SetDefault}
 
-  def notify(self, subject, index):
+  def notify(self, subject, key):
     """Updates a dict subject."""
-    self.__setitem__(index, subject)
+    self.__setitem__(key, subject)
 
   def clear(self):
     """Clears the dict."""

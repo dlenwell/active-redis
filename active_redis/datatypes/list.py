@@ -1,5 +1,7 @@
+from active_redis.core import DataType
+from active_redis.registry import DataType as Registry
 
-@DataType.register
+@Registry.register
 class List(DataType):
   """
   A Redis list data type.

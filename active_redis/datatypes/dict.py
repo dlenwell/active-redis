@@ -14,7 +14,7 @@ class SetDefault(Script):
   local key = KEYS[1]
   local field = ARGV[1]
 
-  var exists = redis.call('HEXISTS', key, field)
+  local exists = redis.call('HEXISTS', key, field)
   if exists then
     return redis.call('HGET', key, field)
   else

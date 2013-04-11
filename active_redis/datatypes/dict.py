@@ -128,3 +128,6 @@ class Dict(DataType, Observer):
   def __contains__(self, key):
     """Supports using 'in' and 'not in' operators."""
     return self.has_key(key)
+
+  def __repr__(self):
+    return repr(dict(self.items()))

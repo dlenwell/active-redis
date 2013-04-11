@@ -61,8 +61,8 @@ class Dict(DataType, Observer):
     """Gets a value from the dict."""
     item = self.client.hget(self.key, key)
     if item is not None:
-      return self.observe(self.client.decode(item), key)
-    return self.observe(default, key)
+      return self.client.decode(item)
+    return default
 
   def has_key(self, key):
     """Indicates whether the given key exists."""
@@ -98,7 +98,7 @@ class Dict(DataType, Observer):
     """Pops a value from the dictionary."""
     item = self.client.hget(self.key, key)
     if item is not None:
-      return self.observe(self.client.decode(item), key)
+      return self.client.decode(item)
     else:
       try:
         return args[0]

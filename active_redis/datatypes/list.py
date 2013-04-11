@@ -179,11 +179,12 @@ class List(DataType, Observer):
     self._execute_script('reverse', self.key)
     return self
 
-  def delete(self):
+  def delete(self, references=False):
     """Deletes the list."""
-    for item in self:
-      if isinstance(item, DataType):
-        item.delete()
+    if references is True:
+      for item in self:
+        if isinstance(item, DataType):
+          item.delete()
     self.client.delete(self.key)
 
   def __iter__(self):

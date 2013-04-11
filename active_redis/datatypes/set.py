@@ -301,11 +301,12 @@ class Set(DataType):
     self.client.sunionstore(newset.key, self.key)
     return newset
 
-  def delete(self):
+  def delete(self, references=False):
     """Deletes the set."""
-    for item in self:
-      if isinstance(item, DataType):
-        item.delete()
+    if references is True:
+      for item in self:
+        if isinstance(item, DataType):
+          item.delete()
     self.client.delete(self.key)
 
   def __len__(self):

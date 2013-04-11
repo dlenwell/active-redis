@@ -117,11 +117,12 @@ class Dict(DataType, Observer):
     """Sets a dict item value or default value."""
     return self._execute_script('setdefault', self.key, key, default)
 
-  def delete(self):
+  def delete(self, references=False):
     """Deletes the dictionary."""
-    for key, item in self.iteritems():
-      if isinstance(item, DataType):
-        item.delete()
+    if references is True:
+      for key, item in self.iteritems():
+        if isinstance(item, DataType):
+          item.delete()
     self.client.delete(self.key)
 
   def __len__(self):

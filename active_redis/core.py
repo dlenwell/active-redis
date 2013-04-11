@@ -176,10 +176,12 @@ class DataType(object):
   def expire(self, ttl):
     """Sets an expiration on the data type."""
     self.client.pexpire(self.key, ttl)
+    return ttl
 
   def expireat(self, time):
     """Sets an expiration on the data type given a time stamp."""
     self.client.pexpireat(self.key, time)
+    return time
 
   def delete(self, references=False):
     """Deletes the data type."""

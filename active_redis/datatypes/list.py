@@ -26,7 +26,7 @@ class List(DataType, Observer):
     i = 0
     item = self.client.lindex(self.key, i)
     while item is not None:
-      yield self.wrap(self.decode(item), i)
+      yield self.observe(self.decode(item), i)
       i += 1
       item = self.client.lindex(self.key, i)
 
@@ -39,7 +39,7 @@ class List(DataType, Observer):
     item = self.client.lindex(self.key, key)
     if item is None:
       raise IndexError("Index out of range.")
-    return self.wrap(self.decode(item), key)
+    return self.observe(self.decode(item), key)
 
   def __setitem__(self, key, item):
     """Sets a list item."""

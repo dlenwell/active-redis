@@ -44,7 +44,7 @@ class Dict(DataType, Observer):
     """Gets a value from the dict."""
     item = self.client.hget(self.key, key)
     if item is not None:
-      return self.observe(self.decode(item), key)
+      return self.observe(self.client.decode(item), key)
     return self.observe(default, key)
 
   def has_key(self, key):
@@ -53,12 +53,12 @@ class Dict(DataType, Observer):
 
   def items(self):
     """Returns all dict items."""
-    return [(key, self.observe(self.decode(item), key)) for key, item in self.client.hgetall(self.key).items()]
+    return [(key, self.observe(self.client.decode(item), key)) for key, item in self.client.hgetall(self.key).items()]
 
   def iteritems(self):
     """Returns an iterator over dict items."""
     for key in self.client.hkeys(self.key):
-      yield key, self.observe(self.decode(self.client.hget(self.key, key)), key)
+      yield key, self.observe(self.client.decode(self.client.hget(self.key, key)), key)
 
   def keys(self):
     """Returns all dict keys."""
@@ -70,18 +70,18 @@ class Dict(DataType, Observer):
 
   def values(self):
     """Returns all dict values."""
-    return [self.observe(self.decode(self.client.hget(self.key, key)), key) for key in self.client.hkeys(self.key)]
+    return [self.observe(self.client.decode(self.client.hget(self.key, key)), key) for key in self.client.hkeys(self.key)]
 
   def itervalues(self):
     """Returns an iterator over dict values."""
     for key in self.client.hkeys(self.key):
-      yield self.observe(self.decode(self.client.hget(self.key, key)), key)
+      yield self.observe(self.client.decode(self.client.hget(self.key, key)), key)
 
   def pop(self, key, *args):
     """Pops a value from the dictionary."""
     item = self.client.hget(self.key, key)
     if item is not None:
-      return self.observe(self.decode(item), key)
+      return self.observe(self.client.decode(item), key)
     else:
       try:
         return args[0]
@@ -95,6 +95,13 @@ class Dict(DataType, Observer):
     """Sets a dict item value or default value."""
     return self._execute_script('setdefault', self.key, key, default)
 
+  def delete(self):
+    """Deletes the dictionary."""
+    for key, item in self.iteritems():
+      if isinstance(item, DataType):
+        item.delete()
+    self.client.delete(self.key)
+
   def __len__(self):
     return self.client.hlen(self.key)
 
@@ -106,13 +113,13 @@ class Dict(DataType, Observer):
     """Gets a dict item."""
     item = self.client.hget(self.key, key)
     if item is not None:
-      return self.observe(self.decode(item), key)
+      return self.observe(self.client.decode(item), key)
     else:
-      raise KeyError("Hash key %s not found." % (key,))
+      raise KeyError("Key %s not found." % (key,))
 
   def __setitem__(self, key, item):
     """Sets a dict item."""
-    return self.client.hset(self.key, key, self.encode(item))
+    return self.client.hset(self.key, key, self.client.encode(item))
 
   def __delitem__(self, key):
     """Deletes an item from the dict."""

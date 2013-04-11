@@ -4,7 +4,7 @@ from redis import Redis
 from registry import DataType as DataTypeRegistry
 from registry import Observable as ObservableRegistry
 from exception import *
-import uuid
+import uuid, json
 
 class ActiveRedis(object):
   """
@@ -36,42 +36,41 @@ class ActiveRedis(object):
           self.client = Redis(*args, **kwargs)
       except IndexError:
         self.client = Redis(*args, **kwargs)
-    self.encoder = Encoder(self.client)
-    self.encode = self.encoder.encode
-    self.decode = self.encoder.decode
 
   @staticmethod
   def _create_unique_key():
     """Generates a unique Redis key using UUID."""
     return uuid.uuid4()
 
-  @staticmethod
-  def _wrap_datatype(datatype):
+  def _wrap_datatype(self, datatype):
     """Wraps a datatype constructor."""
     def create_datatype(key=None):
-      return datatype(key or ActiveRedis._create_unique_key(), self.client)
+      return datatype(key or ActiveRedis._create_unique_key(), ActiveRedisClient(self.client))
     return create_datatype
 
   def __getattr__(self, name):
     if DataType.exists(name):
-      return ActiveRedis._wrap_datatype(DataType.get(name))
+      return self._wrap_datatype(DataType.get(name))
     else:
       raise AttributeError("Attribute %s not found." % (name,))
 
-class Encoder(object):
+class ActiveRedisClient(object):
   """
   Handles encoding and decoding of objects.
   """
   REDIS_STRUCTURE_PREFIX = 'redis:struct'
-  ABSOLUTE_VALUE_PREFIX = 'redis:abs'
+  ABSOLUTE_VALUE_PREFIX = 'redis:absolute'
 
-  def __init__(self, client):
-    self.client = client
+  def __init__(self, redis):
+    self.redis = redis
+
+  def __getattr__(self, name):
+    return getattr(self.redis, name)
 
   def encode(self, item):
     """Encodes a Python object."""
-    if isinstance(item, Wrapper):
-      item = item.subject
+    if isinstance(item, Notifier):
+      item = item.observable.subject
     if self._is_redis_item(item):
       return self._encode_redis_item(item)
     else:
@@ -83,7 +82,7 @@ class Encoder(object):
 
   def _encode_redis_item(self, item):
     """Encodes a Redis data type."""
-    return "%s:%s" % (self.REDIS_STRUCTURE_PREFIX, item.key)
+    return "%s:%s:%s" % (self.REDIS_STRUCTURE_PREFIX, item.type, item.key)
 
   def _encode_structure_item(self, item):
     """Encodes a structure."""
@@ -104,11 +103,8 @@ class Encoder(object):
 
   def _decode_redis_value(self, value):
     """Decodes a Redis data type value."""
-    key = value[len(self.REDIS_STRUCTURE_PREFIX)+1:]
-    type = self.client.type(key)
-    if type is None or type == 'none':
-      raise EncodingError("Failed to decode value. Key %s does not exist." % (key,))
-    return DataType.get(type)(key, self.client)
+    type, key = value[len(self.REDIS_STRUCTURE_PREFIX)+1:].split(':', 1)
+    return DataType.get(type)(key, self)
 
   def _is_structure_value(self, value):
     """Indicates whether the value is a Python structure."""
@@ -129,10 +125,6 @@ class DataType(object):
     self.key = key
     self.client = client
 
-  def __new__(cls, name, bases, attr):
-    attr['_scripts']['delete_all'] = DeleteAll
-    return object.__new__(cls, name, bases, attr)
-
   @classmethod
   def exists(cls, type):
     """Indicates whether a data type handler exists."""
@@ -147,7 +139,7 @@ class DataType(object):
     """Allows the data type key to be changed."""
     if name == 'key' and hasattr(self, 'key'):
       self.client.rename(self.key, value)
-      self.key = value
+    object.__setattr__(self, name, value)
 
   def _load_script(self, script):
     """Loads a script handler."""
@@ -162,7 +154,7 @@ class DataType(object):
 
   def delete(self):
     """Deletes the data type."""
-    self._execute_script('delete_all', self.key)
+    raise NotImplementedError("Data types must implement the delete() method.")
 
 class Observer(object):
   """
@@ -179,7 +171,7 @@ class Observer(object):
   def observe(self, subject, *args, **kwargs):
     """Creates an observer for the given subject."""
     if Observable.is_observable(subject):
-      return Notifier(Observable.get(subject)(subject, *args, **kwargs), self)
+      return Notifier(Observable.get_observable(subject)(subject, *args, **kwargs), self)
     else:
       return subject
 
@@ -196,7 +188,7 @@ class Notifier(object):
     self.observable = observable
     self.observer = observer
 
-  def wrap_method(self, name):
+  def _wrap_method(self, name):
     def execute_method(*args, **kwargs):
       retval = getattr(self.observable, name)(*args, **kwargs)
       self.observer.notify(self.observable.subject, *self.observable.args, **self.observable.kwargs)
@@ -205,8 +197,8 @@ class Notifier(object):
 
   def __getattr__(self, name):
     """Checks for a method that needs to be wrapped."""
-    if name in self.watch_methods and callable(getattr(self.observable, name)):
-      return self.wrap_method(name)
+    if name in self.observable.watch_methods and hasattr(self.observable, name) and callable(getattr(self.observable, name)):
+      return self._wrap_method(name)
     elif hasattr(self.observable, name):
       return getattr(self.observable, name)
     else:
@@ -230,10 +222,7 @@ class Observable(object):
     self.kwargs = kwargs
 
   def __getattr__(self, name):
-    if hasattr(self.subject, name):
-      return getattr(self.subject, name)
-    else:
-      raise AttributeError("Attribute %s not found." % (name,))
+    return getattr(self.subject, name)
 
   @classmethod
   def is_observable(cls, type):
@@ -320,83 +309,3 @@ class Script(object):
     Sub-classes should override this to perform post-processing on return values.
     """
     return value
-
-class DeleteAll(Script):
-  """
-  Finds and deletes references to other Redis data types within all Redis data structures.
-  """
-  keys = ['key']
-
-  script = """
-  local function delete_references(key)
-    local function is_redis_datatype(value)
-      local i = string.find(value, 'redis:struct')
-      return i == 1
-    end
-  
-    local function get_reference(value)
-      return string.sub(value, 14)
-    end
-  
-    local function get_type(key)
-      return redis.call('TYPE', key)
-    end
-
-    local function check_references(value)
-      if is_redis_datatype(value) then
-        delete_references(get_reference(value))
-      end
-    end
-  
-    local function delete_list(key)
-      local i = 0
-      local item = redis.call('LINDEX', key, i)
-      while item do
-        check_references(item)
-        i = i + 1
-        item = redis.call('LINDEX', key, i)
-      end
-      redis.call('DEL', key)
-    end
-  
-    local function delete_hash(key)
-      local vals = redis.call('HVALS', key)
-      for i = 1, #vals do
-        check_references(vals[i])
-      end
-      redis.call('DEL', key)
-    end
-  
-    local function delete_set(key)
-      local members = redis.call('SMEMBERS', key)
-      for i = 1, #members do
-        check_references(members[i])
-      end
-      redis.call('DEL', key)
-    end
-  
-    local function delete_sorted_set(key)
-      local count = redis.call('ZCARD', key)
-      local members = redis.call('ZRANGE', key, 0, count)
-      for i = 1, #members do
-        check_references(members[i])
-      end
-      redis.call('DEL', key)
-    end
-
-    local type = get_type(key)['ok']
-    if type == 'list' then
-      delete_list(key)
-    elseif type == 'hash' then
-      delete_hash(key)
-    elseif type == 'set' then
-      delete_set(key)
-    elseif type == 'sorted_set' then
-      delete_sorted_set(key)
-    else
-      redis.call('DEL', key)
-    end
-  end
-
-  delete_references(KEYS[1])
-  """

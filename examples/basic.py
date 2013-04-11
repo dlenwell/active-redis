@@ -20,46 +20,46 @@ print 'money!' in otherlist
 mylist.append(otherlist)
 mylist.delete()
 
-myhash = aredis.hash()
-myhash['foo'] = 'foo'
-myhash['bar'] = 'bar'
-myhash['bar'] = 'baz'
+mydict = aredis.dict()
+mydict['foo'] = 'foo'
+mydict['bar'] = 'bar'
+mydict['bar'] = 'baz'
 
 myset = aredis.set()
 myset.add('foo')
 print len(myset)
 
-myhash['baz'] = myset
-print len(myhash['baz'])
-myhash.delete()
+mydict['baz'] = myset
+print len(mydict['baz'])
+mydict.delete()
 
 activeredis = ActiveRedis(Redis())
 
-# Create a new hash with the key 'foo_hash'.
-foohash = activeredis.hash('foo_hash')
-foohash['foo'] = []
+# Create a new dict with the key 'foo_dict'.
+foodict = activeredis.dict('foo_dict')
+foodict['foo'] = []
 
-# Store a JSON serialized list ['bar'] at key 'foo_hash' field 'foo'.
-foohash['foo'] = ['bar']
+# Store a JSON serialized list ['bar'] at key 'foo_dict' field 'foo'.
+foodict['foo'] = ['bar']
 
 # Even once the list has been serialized, we can still append new
 # values to the list and it will be automatically re-serialized.
 # Active Redis internally wraps and monitors the list for changes.
-foohash['foo'].append('baz')
+foodict['foo'].append('baz')
 
 # Create a new list with the key 'foo_list'.
 foolist = activeredis.list('foo_list')
 
-# Append the hash 'foo_hash' to the list.
-# This will RPUSH an Active Redis reference to 'foo_hash'.
-foolist.append(foohash)
+# Append the dict 'foo_dict' to the list.
+# This will RPUSH an Active Redis reference to 'foo_dict'.
+foolist.append(foodict)
 
 print foolist[0]['foo'] # ['bar', 'baz']
 
 # We can load the objects using the same keys.
-del foohash
-foohash = activeredis.hash('foo_hash')
-print foohash['foo'] # ['bar', 'baz']
+del foodict
+foodict = activeredis.dict('foo_dict')
+print foodict['foo'] # ['bar', 'baz']
 
 del foolist
 foolist = activeredis.list('foo_list')
@@ -70,11 +70,11 @@ print foolist[0]['foo'] # ['bar', 'baz']
 foolist.delete()
 
 try:
-  foohash['foo'] # Not happening.
+  foodict['foo'] # Not happening.
 except KeyError:
-  print "foohash['foo'] is gone!"
+  print "foodict['foo'] is gone!"
 else:
-  print "foohash['foo'] is not gone!"
+  print "foodict['foo'] is not gone!"
 
 # Finally, if key names are irrelevant (such as in the case of
 # a job queue) Active Redis can automatically generate unique keys.

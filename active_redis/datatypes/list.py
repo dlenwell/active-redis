@@ -119,7 +119,7 @@ class List(DataType, Observer):
     i = 0
     item = self.client.lindex(self.key, i)
     while item is not None:
-      yield self.observe(self.decode(item), i)
+      yield self.observe(self.client.decode(item), i)
       i += 1
       item = self.client.lindex(self.key, i)
 
@@ -132,11 +132,11 @@ class List(DataType, Observer):
     item = self.client.lindex(self.key, key)
     if item is None:
       raise IndexError("Index out of range.")
-    return self.observe(self.decode(item), key)
+    return self.observe(self.client.decode(item), key)
 
   def __setitem__(self, key, item):
     """Sets a list item."""
-    return self.client.lset(self.key, key, self.encode(item))
+    return self.client.lset(self.key, key, self.client.encode(item))
 
   def __delitem__(self, key):
     """Deletes a list item."""
@@ -147,23 +147,23 @@ class List(DataType, Observer):
 
   def __contains__(self, item):
     """Supports using 'in' and 'not in' operators."""
-    return self._execute_script('contains', self.key, self.encode(item))
+    return self._execute_script('contains', self.key, self.client.encode(item))
 
   def append(self, item):
     """Appends an item to the list."""
-    self.client.rpush(self.key, self.encode(item))
+    self.client.rpush(self.key, self.client.encode(item))
 
   def extend(self, items):
     """Extends the list."""
-    self.client.rpush(*[self.encode(item) for item in items])
+    self.client.rpush(*[self.client.encode(item) for item in items])
 
   def insert(self, index, item):
     """Inserts an item into the list."""
-    return self._execute_script('insert', self.key, index, self.encode(item))
+    return self._execute_script('insert', self.key, index, self.client.encode(item))
 
   def remove(self, item):
     """Removes an item from the list."""
-    self.client.lrem(self.key, self.encode(item))
+    self.client.lrem(self.key, self.client.encode(item))
 
   def pop(self, index=0):
     """Pops and returns an item from the list."""
@@ -174,13 +174,13 @@ class List(DataType, Observer):
     """Returns a list item by index."""
     item = self.client.lindex(self.key, index)
     if item is not None:
-      return self.decode(item)
+      return self.client.decode(item)
     else:
       raise IndexError("Index out of range.")
 
   def count(self, item):
     """Counts the number of occurences of an item in the list."""
-    return self._execute_script('count', self.key, self.encode(item))
+    return self._execute_script('count', self.key, self.client.encode(item))
 
   def sort(self):
     """Sorts the list."""
@@ -190,3 +190,10 @@ class List(DataType, Observer):
   def reverse(self):
     """Reverses the list."""
     raise NotImplementedError("Reverse method not implemented.")
+
+  def delete(self):
+    """Deletes the list."""
+    for item in self:
+      if isinstance(item, DataType):
+        item.delete()
+    self.client.delete(self.key)

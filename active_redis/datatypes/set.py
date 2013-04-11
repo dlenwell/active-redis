@@ -199,18 +199,18 @@ class Set(DataType):
 
   def add(self, item):
     """Adds an item to the set."""
-    self.client.sadd(self.key, self.encode(item))
+    self.client.sadd(self.key, self.client.encode(item))
 
   def remove(self, item):
     """Removes an item from the set."""
     if item in self:
-      self.client.srem(self.key, self.encode(item))
+      self.client.srem(self.key, self.client.encode(item))
     else:
       raise KeyError("Item not in set.")
 
   def discard(self, item):
     """Discards an item from the set."""
-    self.client.srem(self.key, self.encode(item))
+    self.client.srem(self.key, self.client.encode(item))
 
   def pop(self):
     """Pops an item from the set."""
@@ -218,7 +218,7 @@ class Set(DataType):
     if item is None:
       raise KeyError("Set is empty.")
     else:
-      return self.decode(item)
+      return self.client.decode(item)
 
   def clear(self):
     """Clears all items from the set."""
@@ -226,80 +226,87 @@ class Set(DataType):
 
   def update(self, other):
     """Updates items in the set with items from 'other'."""
-    self.client.sadd(self.key, [self.encode(item) for item in other])
+    self.client.sadd(self.key, [self.client.encode(item) for item in other])
 
   def union(self, other):
     """Performs a union on two sets."""
     newset = DataType.get_handler(self.type)(self.client)
-    if self.encoder._is_redis_item(other):
+    if self.client._is_redis_item(other):
       self.client.sunionstore(newset.key, self.key, other.key)
     else:
-      self._execute_script('union_struct', newset.key, self.key, self._create_unique_key(), [self.encode(item) for item in other])
+      self._execute_script('union_struct', newset.key, self.key, self._create_unique_key(), [self.client.encode(item) for item in other])
     return newset
 
   def intersection(self, other):
     """Performs an intersection on two sets."""
     newset = DataType.get_handler(self.type)(self.client)
-    if self.encoder._is_redis_item(other):
+    if self.client._is_redis_item(other):
       self.client.sinterstore(newset.key, self.key, other.key)
     else:
-      self._execute_script('intersection_struct', newset.key, self.key, self._create_unique_key(), [self.encode(item) for item in other])
+      self._execute_script('intersection_struct', newset.key, self.key, self._create_unique_key(), [self.client.encode(item) for item in other])
     return newset
 
   def intersection_update(self, other):
     """Updates the set via intersection."""
-    if self.encoder._is_redis_item(other):
+    if self.client._is_redis_item(other):
       self.client.sinterstore(self.key, self.key, other.key)
     else:
-      self._execute_script('intersection_struct', self.key, self.key, self._create_unique_key(), [self.encode(item) for item in other])
+      self._execute_script('intersection_struct', self.key, self.key, self._create_unique_key(), [self.client.encode(item) for item in other])
     return self
 
   def difference(self, other):
     """Performs a diff on two sets."""
     newset = DataType.get_handler(self.type)(self.client)
-    if self.encoder._is_redis_item(other):
+    if self.client._is_redis_item(other):
       self.client.sdiffstore(newset.key, self.key, other.key)
     else:
-      self._execute_script('difference_struct', newset.key, self.key, self._create_unique_key(), [self.encode(item) for item in other])
+      self._execute_script('difference_struct', newset.key, self.key, self._create_unique_key(), [self.client.encode(item) for item in other])
     return newset
 
   def symmetric_difference(self, other):
     """Returns a set of elements on one set or the other."""
     # Remember to check whether 'other' is a Redis set or normal Python set.
     newset = DataType.get_handler(self.type)(self.client)
-    if self.encoder._is_redis_item(other):
+    if self.client._is_redis_item(other):
       self._execute_script('symmetric_difference_redis', newset.key, self.key, other.key)
     else:
-      self._execute_script('symmetric_difference_struct', newset.key, self.key, self._create_unique_key(), [self.encode(item) for item in other])
+      self._execute_script('symmetric_difference_struct', newset.key, self.key, self._create_unique_key(), [self.client.encode(item) for item in other])
     return newset
 
   def symmetric_difference_update(self, other):
     """Updates the set via symmetric difference."""
-    if self.encoder._is_redis_item(other):
+    if self.client._is_redis_item(other):
       self._execute_script('symmetric_difference_redis', self.key, self.key, other.key)
     else:
-      self._execute_script('symmetric_difference_struct', self.key, self.key, self._create_unique_key(), [self.encode(item) for item in other])
+      self._execute_script('symmetric_difference_struct', self.key, self.key, self._create_unique_key(), [self.client.encode(item) for item in other])
     return self
 
   def issubset(self, other):
     """Returns a boolean indicating whether every element in the set is in 'other'."""
-    if self.encoder._is_redis_item(other):
+    if self.client._is_redis_item(other):
       return self._execute_script('subset_redis', self.key, other.key)
     else:
-      return self._execute_script('subset_struct', self.key, [self.encode(item) for item in other])
+      return self._execute_script('subset_struct', self.key, [self.client.encode(item) for item in other])
 
   def issuperset(self, other):
     """Returns a boolean indicating whether every element in 'other' is in the set."""
-    if self.encoder._is_redis_item(other):
+    if self.client._is_redis_item(other):
       return self._execute_script('superset_redis', self.key, other.key)
     else:
-      return self._execute_script('superset_struct', self.key, [self.encode(item) for item in other])
+      return self._execute_script('superset_struct', self.key, [self.client.encode(item) for item in other])
 
   def copy(self):
     """Copies the set."""
     newset = DataType.get_handler(self.type)(self.client)
     self.client.sunionstore(newset.key, self.key)
     return newset
+
+  def delete(self):
+    """Deletes the set."""
+    for item in self:
+      if isinstance(item, DataType):
+        item.delete()
+    self.client.delete(self.key)
 
   def __len__(self):
     """Supports use of the global len() function."""
@@ -308,11 +315,11 @@ class Set(DataType):
   def __iter__(self):
     """Returns an iterator over the set."""
     items = self.client.smembers(self.key)
-    return iter(set([self.decode(item) for item in items]))
+    return iter(set([self.client.decode(item) for item in items]))
 
   def __contains__(self, item):
     """Supports the 'in' and 'not in' operators."""
-    return self.client.sismember(self.key, self.encode(item))
+    return self.client.sismember(self.key, self.client.encode(item))
 
   def __le__(self, other):
     """Alias for determining whether the set is a subset of 'other'."""

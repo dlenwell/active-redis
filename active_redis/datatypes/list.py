@@ -176,7 +176,8 @@ class List(DataType, Observer):
 
   def reverse(self):
     """Reverses the list."""
-    return self._execute_script('reverse', self.key)
+    self._execute_script('reverse', self.key)
+    return self
 
   def delete(self):
     """Deletes the list."""

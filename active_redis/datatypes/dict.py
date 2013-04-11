@@ -7,21 +7,38 @@ class SetDefault(Script):
   """
   Sets the value or default value of a dict item.
   """
-  keys = ['key', 'field']
-  args = ['default']
+  keys = ['key']
+  args = ['field', 'default']
 
   script = """
-  var key = KEYS[1]
-  var field = KEYS[2]
+  local key = KEYS[1]
+  local field = ARGV[1]
 
   var exists = redis.call('HEXISTS', key, field)
   if exists then
     return redis.call('HGET', key, field)
   else
-    var default = ARGV[1]
+    local default = ARGV[2]
     redis.call('HSET', key, field, default)
     return default
   end
+  """
+
+class PopItem(Script):
+  """
+  Pops and returns an item from the dictionary.
+  """
+  keys = ['key']
+
+  script = """
+  local key = KEYS[1]
+  local keys = redis.call('HKEYS', key)
+  if keys[1] != nil then
+    local val = redis.call('HGET', key, keys[1])
+    redis.call('HDEL', key, keys[1])
+    return val
+  end
+  return nil
   """
 
 @Registry.register
@@ -89,7 +106,12 @@ class Dict(DataType, Observer):
         raise KeyError("Invalid key %s." % (key,))
 
   def popitem(self):
-    pass
+    """Pops a random item from the dictionary."""
+    item = self._execute_script('popitem', self.key)
+    if item is not None:
+      return self.client.decode(item)
+    else:
+      raise KeyError("Dictionary is empty.")
 
   def setdefault(self, key, default=None):
     """Sets a dict item value or default value."""

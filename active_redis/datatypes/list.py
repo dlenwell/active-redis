@@ -1,10 +1,10 @@
 # Copyright (c) 2013 Jordan Halterman <jordan.halterman@gmail.com>
 # See LICENSE for details.
-from active_redis.core import DataType, Script
+from active_redis.core import DataType, Observer, Script
 from active_redis.registry import DataType as Registry
 
 @Registry.register
-class List(DataType):
+class List(DataType, Observer):
   """
   A Redis list data type.
   """
@@ -17,7 +17,7 @@ class List(DataType):
     'delete': ListDelete,
   }
 
-  def update_subject(self, subject, index):
+  def notify(self, subject, index):
     """Updates a list subject."""
     self.__setitem__(index, subject)
 

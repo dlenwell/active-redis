@@ -1,17 +1,17 @@
 # Copyright (c) 2013 Jordan Halterman <jordan.halterman@gmail.com>
 # See LICENSE for details.
-from active_redis.core import DataType, Script
+from active_redis.core import DataType, Observer, Script
 from active_redis.registry import DataType as Registry
 
 @Registry.register
-class Dict(DataType):
+class Dict(DataType, Observer):
   """
   A Redis dict data type.
   """
   type = 'dict'
   _scripts = {'set_default': SetDefault}
 
-  def update_subject(self, subject, index):
+  def notify(self, subject, index):
     """Updates a dict subject."""
     self.__setitem__(index, subject)
 

@@ -1,5 +1,7 @@
 # Copyright (c) 2013 Jordan Halterman <jordan.halterman@gmail.com>
 # See LICENSE for details.
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from active_redis import ActiveRedis
 
 redis = ActiveRedis()
@@ -18,3 +20,11 @@ mylist.append('bar')
 # will capture changes and re-serialize the list.
 mylist.append(['foo', 'bar'])
 mylist[2].append('baz')
+
+# We can also create a named list by passing a key to the constructor.
+mylist = redis.list('mylist')
+mylist.append('foo')
+del mylist
+
+mylist = redis.list('mylist')
+print mylist # ['foo']

@@ -17,48 +17,48 @@ class Hash(DataType):
 
   def clear(self):
     """Clears the hash."""
-    self.redis.delete(self.key)
+    self.client.delete(self.key)
 
   def get(self, key, default=None):
     """Gets a value from the hash."""
-    item = self.redis.hget(self.key, key)
+    item = self.client.hget(self.key, key)
     if item is not None:
       return self.wrap(self.decode(item), key)
     return self.wrap(default, key)
 
   def has_key(self, key):
     """Indicates whether the given key exists."""
-    return self.redis.hexists(self.key, key)
+    return self.client.hexists(self.key, key)
 
   def items(self):
     """Returns all hash items."""
-    return [(key, self.wrap(self.decode(item), key)) for key, item in self.redis.hgetall(self.key).items()]
+    return [(key, self.wrap(self.decode(item), key)) for key, item in self.client.hgetall(self.key).items()]
 
   def iteritems(self):
     """Returns an iterator over hash items."""
-    for key in self.redis.hkeys(self.key):
-      yield key, self.wrap(self.decode(self.redis.hget(self.key, key)), key)
+    for key in self.client.hkeys(self.key):
+      yield key, self.wrap(self.decode(self.client.hget(self.key, key)), key)
 
   def keys(self):
     """Returns all hash keys."""
-    return self.redis.hkeys(self.key)
+    return self.client.hkeys(self.key)
 
   def iterkeys(self):
     """Returns an iterator over hash keys."""
-    return iter(self.redis.hkeys(self.key))
+    return iter(self.client.hkeys(self.key))
 
   def values(self):
     """Returns all hash values."""
-    return [self.wrap(self.decode(self.redis.hget(self.key, key)), key) for key in self.redis.hkeys(self.key)]
+    return [self.wrap(self.decode(self.client.hget(self.key, key)), key) for key in self.client.hkeys(self.key)]
 
   def itervalues(self):
     """Returns an iterator over hash values."""
-    for key in self.redis.hkeys(self.key):
-      yield self.wrap(self.decode(self.redis.hget(self.key, key)), key)
+    for key in self.client.hkeys(self.key):
+      yield self.wrap(self.decode(self.client.hget(self.key, key)), key)
 
   def pop(self, key, *args):
     """Pops a value from the dictionary."""
-    item = self.redis.hget(self.key, key)
+    item = self.client.hget(self.key, key)
     if item is not None:
       return self.wrap(self.decode(item), key)
     else:
@@ -75,7 +75,7 @@ class Hash(DataType):
     return self._execute_script('setdefault', self.key, key, default)
 
   def __len__(self):
-    return self.redis.hlen(self.key)
+    return self.client.hlen(self.key)
 
   def __iter__(self):
     """Iterates over hash keys."""
@@ -83,7 +83,7 @@ class Hash(DataType):
 
   def __getitem__(self, key):
     """Gets a hash item."""
-    item = self.redis.hget(self.key, key)
+    item = self.client.hget(self.key, key)
     if item is not None:
       return self.wrap(self.decode(item), key)
     else:
@@ -91,11 +91,11 @@ class Hash(DataType):
 
   def __setitem__(self, key, item):
     """Sets a hash item."""
-    return self.redis.hset(self.key, key, self.encode(item))
+    return self.client.hset(self.key, key, self.encode(item))
 
   def __delitem__(self, key):
     """Deletes an item from the hash."""
-    return self.redis.hdel(self.key, key)
+    return self.client.hdel(self.key, key)
 
   def __contains__(self, key):
     """Supports using 'in' and 'not in' operators."""

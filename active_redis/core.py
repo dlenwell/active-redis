@@ -152,7 +152,7 @@ class DataType(object):
   def _load_script(self, script):
     """Loads a script handler."""
     try:
-      return self._scripts[script](self.key.client)
+      return self._scripts[script](self.client)
     except KeyError:
       raise ScriptError("Invalid script %s." % (script,))
 

@@ -18,26 +18,26 @@ class List(DataType):
   def __iter__(self):
     """Returns an iterator."""
     i = 0
-    item = self.redis.lindex(self.key, i)
+    item = self.client.lindex(self.key, i)
     while item is not None:
       yield self.wrap(self.decode(item), i)
       i += 1
-      item = self.redis.lindex(self.key, i)
+      item = self.client.lindex(self.key, i)
 
   def __len__(self):
     """Supports the len() global function."""
-    return self.redis.llen(self.key)
+    return self.client.llen(self.key)
 
   def __getitem__(self, key):
     """Gets a list item."""
-    item = self.redis.lindex(self.key, key)
+    item = self.client.lindex(self.key, key)
     if item is None:
       raise IndexError("Index out of range.")
     return self.wrap(self.decode(item), key)
 
   def __setitem__(self, key, item):
     """Sets a list item."""
-    return self.redis.lset(self.key, key, self.encode(item))
+    return self.client.lset(self.key, key, self.encode(item))
 
   def __delitem__(self, key):
     """Deletes a list item."""
@@ -52,11 +52,11 @@ class List(DataType):
 
   def append(self, item):
     """Appends an item to the list."""
-    self.redis.rpush(self.key, self.encode(item))
+    self.client.rpush(self.key, self.encode(item))
 
   def extend(self, items):
     """Extends the list."""
-    self.redis.rpush(*[self.encode(item) for item in items])
+    self.client.rpush(*[self.encode(item) for item in items])
 
   def insert(self, index, item):
     """Inserts an item into the list."""
@@ -64,7 +64,7 @@ class List(DataType):
 
   def remove(self, item):
     """Removes an item from the list."""
-    self.redis.lrem(self.key, self.encode(item))
+    self.client.lrem(self.key, self.encode(item))
 
   def pop(self, index=0):
     """Pops and returns an item from the list."""
@@ -73,7 +73,7 @@ class List(DataType):
 
   def index(self, index):
     """Returns a list item by index."""
-    item = self.redis.lindex(self.key, index)
+    item = self.client.lindex(self.key, index)
     if item is not None:
       return self.decode(item)
     else:
@@ -85,7 +85,7 @@ class List(DataType):
 
   def sort(self):
     """Sorts the list."""
-    self.redis.sort(self.key)
+    self.client.sort(self.key)
     return self
 
   def reverse(self):

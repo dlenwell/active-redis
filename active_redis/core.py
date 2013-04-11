@@ -17,17 +17,7 @@ class ActiveRedis(object):
     required to construct a Redis instance.
     """
     if len(args) == 0 and len(kwargs) == 0:
-      if len(self.default_config) == 0:
-        self.client = Redis()
-      else:
-        try:
-          self.default_config[1]
-          self.client = Redis(*self.default_config[0], **self.default_config[1])
-        except IndexError:
-          if isinstance(self.default_config[0], dict):
-            self.client = Redis(**self.default_config[0])
-          else:
-            self.client = Redis(*self.default_config[0])
+      self.client = Redis()
     else:
       try:
         if isinstance(args[0], Redis):

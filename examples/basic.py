@@ -1,9 +1,8 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from active_redis import ActiveRedis
-from redis import Redis
 
-aredis = ActiveRedis(Redis())
+aredis = ActiveRedis()
 
 mylist = aredis.list('foo')
 mylist.append('foo')
@@ -33,7 +32,7 @@ mydict['baz'] = myset
 print len(mydict['baz'])
 mydict.delete()
 
-activeredis = ActiveRedis(Redis())
+activeredis = ActiveRedis()
 
 # Create a new dict with the key 'foo_dict'.
 foodict = activeredis.dict('foo_dict')

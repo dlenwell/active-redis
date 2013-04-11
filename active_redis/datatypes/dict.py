@@ -4,23 +4,23 @@ from active_redis.core import DataType, Script
 from active_redis.registry import DataType as Registry
 
 @Registry.register
-class Hash(DataType):
+class Dict(DataType):
   """
-  A Redis hash data type.
+  A Redis dict data type.
   """
-  type = 'hash'
+  type = 'dict'
   _scripts = {'set_default': SetDefault}
 
   def update_subject(self, subject, index):
-    """Updates a hash subject."""
+    """Updates a dict subject."""
     self.__setitem__(index, subject)
 
   def clear(self):
-    """Clears the hash."""
+    """Clears the dict."""
     self.client.delete(self.key)
 
   def get(self, key, default=None):
-    """Gets a value from the hash."""
+    """Gets a value from the dict."""
     item = self.client.hget(self.key, key)
     if item is not None:
       return self.wrap(self.decode(item), key)
@@ -31,28 +31,28 @@ class Hash(DataType):
     return self.client.hexists(self.key, key)
 
   def items(self):
-    """Returns all hash items."""
+    """Returns all dict items."""
     return [(key, self.wrap(self.decode(item), key)) for key, item in self.client.hgetall(self.key).items()]
 
   def iteritems(self):
-    """Returns an iterator over hash items."""
+    """Returns an iterator over dict items."""
     for key in self.client.hkeys(self.key):
       yield key, self.wrap(self.decode(self.client.hget(self.key, key)), key)
 
   def keys(self):
-    """Returns all hash keys."""
+    """Returns all dict keys."""
     return self.client.hkeys(self.key)
 
   def iterkeys(self):
-    """Returns an iterator over hash keys."""
+    """Returns an iterator over dict keys."""
     return iter(self.client.hkeys(self.key))
 
   def values(self):
-    """Returns all hash values."""
+    """Returns all dict values."""
     return [self.wrap(self.decode(self.client.hget(self.key, key)), key) for key in self.client.hkeys(self.key)]
 
   def itervalues(self):
-    """Returns an iterator over hash values."""
+    """Returns an iterator over dict values."""
     for key in self.client.hkeys(self.key):
       yield self.wrap(self.decode(self.client.hget(self.key, key)), key)
 
@@ -71,18 +71,18 @@ class Hash(DataType):
     pass
 
   def setdefault(self, key, default=None):
-    """Sets a hash item value or default value."""
+    """Sets a dict item value or default value."""
     return self._execute_script('setdefault', self.key, key, default)
 
   def __len__(self):
     return self.client.hlen(self.key)
 
   def __iter__(self):
-    """Iterates over hash keys."""
+    """Iterates over dict keys."""
     return self.iterkeys()
 
   def __getitem__(self, key):
-    """Gets a hash item."""
+    """Gets a dict item."""
     item = self.client.hget(self.key, key)
     if item is not None:
       return self.wrap(self.decode(item), key)
@@ -90,11 +90,11 @@ class Hash(DataType):
       raise KeyError("Hash key %s not found." % (key,))
 
   def __setitem__(self, key, item):
-    """Sets a hash item."""
+    """Sets a dict item."""
     return self.client.hset(self.key, key, self.encode(item))
 
   def __delitem__(self, key):
-    """Deletes an item from the hash."""
+    """Deletes an item from the dict."""
     return self.client.hdel(self.key, key)
 
   def __contains__(self, key):
@@ -103,7 +103,7 @@ class Hash(DataType):
 
 class SetDefault(Script):
   """
-  Sets the value or default value of a hash item.
+  Sets the value or default value of a dict item.
   """
   keys = ['key', 'field']
   args = ['default']

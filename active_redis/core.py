@@ -4,7 +4,7 @@ from redis import Redis
 from registry import DataType as DataTypeRegistry
 from registry import Observable as ObservableRegistry
 from exception import *
-import uuid, json
+import uuid, cPickle
 
 class ActiveRedis(object):
   """
@@ -76,7 +76,7 @@ class ActiveRedisClient(object):
 
   def _encode_structure_item(self, item):
     """Encodes a structure."""
-    return "%s:%s" % (self.ABSOLUTE_VALUE_PREFIX, json.dumps(item))
+    return "%s:%s" % (self.ABSOLUTE_VALUE_PREFIX, cPickle.dumps(item))
 
   def decode(self, value):
     """Decodes a stored value."""
@@ -102,7 +102,7 @@ class ActiveRedisClient(object):
 
   def _decode_structure_value(self, value):
     """Decodes a structure value."""
-    return json.loads(value[len(self.ABSOLUTE_VALUE_PREFIX)+1:])
+    return cPickle.loads(value[len(self.ABSOLUTE_VALUE_PREFIX)+1:])
 
 class DataType(object):
   """
@@ -142,7 +142,46 @@ class DataType(object):
     """Executes a script."""
     return self._load_script(script)(*args, **kwargs)
 
-  def delete(self):
+  def lock(self, atime=10, locktime=10):
+    """Aquires a lock on the key."""
+    lockname = "%s:%s" % (self.key, 'lock')
+    end = time.time() + atime
+    while end > time.time():
+      if self.redis.setnx(lockname, str(self)):
+        self.redis.expire(lockname, locktime)
+        return str(self)
+      elif not self.redis.ttl(lockname):
+        self.redis.expire(lockname, locktime)
+      time.sleep(.001)
+    return False
+
+  def release(self):
+    """Releases a lock on the key."""
+    lockname = "%s:%s" % (self.key, 'lock')
+    pipe = self.redis.pipeline(True)
+    while True:
+      try:
+        pipe.watch(lockname)
+        if pipe.get(lockname) == str(self):
+          pipe.multi()
+          pipe.delete(lockname)
+          pipe.execute()
+          return True
+        pipe.unwatch()
+        break
+      except WatchError:
+        pass
+    return False
+
+  def expire(self, ttl):
+    """Sets an expiration on the data type."""
+    self.client.pexpire(self.key, ttl)
+
+  def expireat(self, time):
+    """Sets an expiration on the data type given a time stamp."""
+    self.client.pexpireat(self.key, time)
+
+  def delete(self, references=False):
     """Deletes the data type."""
     raise NotImplementedError("Data types must implement the delete() method.")
 

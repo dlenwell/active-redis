@@ -20,6 +20,7 @@ mylist.append('bar')
 # will capture changes and re-serialize the list.
 mylist.append(['foo', 'bar'])
 mylist[2].append('baz')
+mylist.delete()
 
 # We can also create a named list by passing a key to the constructor.
 mylist = redis.list('mylist')

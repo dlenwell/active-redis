@@ -230,7 +230,7 @@ class Set(DataType):
 
   def union(self, other):
     """Performs a union on two sets."""
-    newset = DataType.get_handler(self.type)(self.client)
+    newset = DataType.get(self.type)(self.client)
     if self.client._is_redis_item(other):
       self.client.sunionstore(newset.key, self.key, other.key)
     else:
@@ -239,7 +239,7 @@ class Set(DataType):
 
   def intersection(self, other):
     """Performs an intersection on two sets."""
-    newset = DataType.get_handler(self.type)(self.client)
+    newset = DataType.get(self.type)(self.client)
     if self.client._is_redis_item(other):
       self.client.sinterstore(newset.key, self.key, other.key)
     else:
@@ -256,7 +256,7 @@ class Set(DataType):
 
   def difference(self, other):
     """Performs a diff on two sets."""
-    newset = DataType.get_handler(self.type)(self.client)
+    newset = DataType.get(self.type)(self.client)
     if self.client._is_redis_item(other):
       self.client.sdiffstore(newset.key, self.key, other.key)
     else:
@@ -266,7 +266,7 @@ class Set(DataType):
   def symmetric_difference(self, other):
     """Returns a set of elements on one set or the other."""
     # Remember to check whether 'other' is a Redis set or normal Python set.
-    newset = DataType.get_handler(self.type)(self.client)
+    newset = DataType.get(self.type)(self.client)
     if self.client._is_redis_item(other):
       self._execute_script('symmetric_difference_redis', newset.key, self.key, other.key)
     else:
@@ -297,7 +297,7 @@ class Set(DataType):
 
   def copy(self):
     """Copies the set."""
-    newset = DataType.get_handler(self.type)(self.client)
+    newset = DataType.get(self.type)(self.client)
     self.client.sunionstore(newset.key, self.key)
     return newset
 

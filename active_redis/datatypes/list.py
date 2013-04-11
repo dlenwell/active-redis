@@ -80,6 +80,28 @@ class ListContains(Script):
   return false
   """
 
+class ListReverse(Script):
+  """
+  Reverses all items in the list.
+  """
+  keys = ['key']
+
+  # Copies the list to a temporary key and builds the list in reverse.
+  script = """
+  local key = KEYS[1]
+  local tempkey = key..':reverse'
+  redis.call('SUNIONSTORE', tempkey, key)
+  redis.call('DEL', key)
+
+  local item = redis.call('RPOP', tempkey)
+  while item do
+    redis.call('RPUSH', key)
+    item = redis.call('RPOP', tempkey)
+  end
+  redis.call('DEL', tempkey)
+  return true
+  """
+
 class ListDelete(Script):
   """
   Deletes an item from a list by index.
@@ -107,6 +129,7 @@ class List(DataType, Observer):
     'pop': ListPop,
     'count': ListCount,
     'contains': ListContains,
+    'reverse': ListReverse,
     'delete': ListDelete,
   }
 
@@ -132,7 +155,6 @@ class List(DataType, Observer):
 
   def pop(self, index=0):
     """Pops and returns an item from the list."""
-    # Note that this should remove and then return the index item.
     return self._execute_script('pop', self.key, index)
 
   def index(self, index):
@@ -154,7 +176,7 @@ class List(DataType, Observer):
 
   def reverse(self):
     """Reverses the list."""
-    raise NotImplementedError("Reverse method not implemented.")
+    return self._execute_script('reverse', self.key)
 
   def delete(self):
     """Deletes the list."""

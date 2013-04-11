@@ -1,3 +1,5 @@
+# Copyright (c) 2013 Jordan Halterman <jordan.halterman@gmail.com>
+# See LICENSE for details.
 from active_redis.core import DataType
 from active_redis.registry import DataType as Registry
 

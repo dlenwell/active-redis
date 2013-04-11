@@ -7,10 +7,6 @@ class Registry(object):
   """
   Abstract registry.
   """
-  def __new__(cls, name, bases, attr):
-    attr['_handlers'] = {}
-    return object.__new__(cls, name, bases, attr)
-
   @classmethod
   def register(cls, handler):
     """Registers a handler."""
@@ -47,11 +43,14 @@ class DataType(Registry):
   """
   Data type registry.
   """
+  _handlers = {}
 
 class Observable(Registry):
   """
   Observable registry.
   """
+  _handlers = {}
+
   @classmethod
   def is_observable(cls, type):
     if not inspect.isclass(type):

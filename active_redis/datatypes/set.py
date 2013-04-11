@@ -3,6 +3,182 @@
 from active_redis.core import DataType, Script
 from active_redis.registry import DataType as Registry
 
+class UnionStruct(Script):
+  """
+  Performs a union on one Redis struct and one Python struct.
+  """
+  keys = ['newset', 'set1', 'set2']
+  variable_args = True
+
+  script = """
+  local newset = KEYS[1]
+  local set1 = KEYS[2]
+  local set2 = KEYS[3]
+
+  local set2args = ARGV
+
+  if #set2args > 2 then
+    redis.call('SADD', set2, unpack(set2args))
+  end
+
+  redis.call('SUNIONSTORE', newset, set1, set2)
+  redis.call('DEL', set2)
+  """
+
+class IntersectionStruct(Script):
+  """
+  Performs an intersection on one Redis struct and one Python struct.
+  """
+  keys = ['newset', 'set1', 'set2']
+  variable_args = True
+
+  script = """
+  local newset = KEYS[1]
+  local set1 = KEYS[2]
+  local set2 = KEYS[3]
+
+  local set2args = ARGV
+
+  if #set2args > 2 then
+    redis.call('SADD', set2, unpack(set2args))
+  end
+
+  redis.call('SINTERSTORE', newset, set1, set2)
+  redis.call('DEL', set2)
+  """
+
+class DifferenceStruct(Script):
+  """
+  Performs an intersection on one Redis struct and one Python struct.
+  """
+  keys = ['newset', 'set1', 'set2']
+  variable_args = True
+
+  script = """
+  local newset = KEYS[1]
+  local set1 = KEYS[2]
+  local set2 = KEYS[3]
+
+  local set2args = ARGV
+
+  if #set2args > 2 then
+    redis.call('SADD', set2, unpack(set2args))
+  end
+
+  redis.call('SDIFFSTORE', newset, set1, set2)
+  redis.call('DEL', set2)
+  """
+
+class SymmetricDifferenceRedis(Script):
+  """
+  Returns a set of elements in one set or the other but not both.
+  """
+  keys = ['newset', 'set1', 'set2']
+
+  script = """
+  local newset = KEYS[1]
+  local set1 = KEYS[2]
+  local set2 = KEYS[3]
+
+  local set1diff = set1 .. ":diff"
+  local set2diff = set2 .. ":diff"
+  redis.call('SDIFFSTORE', set1diff, set1, set2)
+  redis.call('SDIFFSTORE', set2diff, set2, set1)
+  redis.call('SUNIONSTORE', newset, set1diff, set2diff)
+  redis.call('DEL', set1diff, set2diff)
+  """
+
+class SymmetricDifferenceStruct(Script):
+  """
+  Returns a set of elements in one set or the other but not both.
+  """
+  keys = ['newset', 'set1', 'set2']
+  args = []
+  variable_args = True
+
+  script = """
+  local newset = KEYS[1]
+  local set1 = KEYS[2]
+  local set2 = KEYS[3]
+
+  -- Add set 2 items.
+  local set2args = ARGV
+  if #set2args > 0 then
+    redis.call('SADD', set2, unpack(set2args))
+  end
+
+  local set1diff = set1 .. ":diff"
+  local set2diff = set2 .. ":diff"
+  redis.call('SDIFFSTORE', set1diff, set1, set2)
+  redis.call('SDIFFSTORE', set2diff, set2, set1)
+  redis.call('SUNIONSTORE', newset, set1diff, set2diff)
+  redis.call('DEL', set1diff, set2diff, set2) -- Set 2 is automatically deleted as well.
+  """
+
+class SubsetRedis(Script):
+  """
+  Returns a boolean indicating whether a set is a subset of set1.
+  """
+  keys = ['set1', 'set2']
+
+  script = """
+  local set1 = KEYS[1]
+  local set2 = KEYS[2]
+
+  return #redis.call('SDIFF', set1, set2) == 0
+  """
+
+class SubsetStruct(Script):
+  """
+  Returns a boolean indicating whether a set is a subset of set1.
+  """
+  keys = ['set1']
+  variable_args = True
+
+  script = """
+  local set1 = KEYS[1]
+  local args = ARGV
+
+  local tempset = set1 .. ':temp'
+  redis.call('SADD', tempset, unpack(args))
+
+  local count = #redis.call('SDIFF', set1, tempset)
+  redis.call('DEL', diffset)
+  return count == 0
+  """
+
+class SupersetRedis(Script):
+  """
+  Returns a boolean indicating whether a set is a superset of set1.
+  """
+  keys = ['set1', 'set2']
+
+  script = """
+  local set1 = KEYS[1]
+  local set2 = KEYS[2]
+
+  return #redis.call('SDIFF', set2, set1) == 0
+  """
+
+class SupersetStruct(Script):
+  """
+  Returns a boolean indicating whether a set is a superset of set1.
+  """
+  keys = ['set1']
+  variable_args = True
+
+  script = """
+  local set1 = KEYS[1]
+  local args = ARGV
+
+  local tempset = set1 .. ':temp'
+  redis.call('SADD', tempset, unpack(args))
+
+  local count = #redis.call('SDIFF', tempset, set1)
+  redis.call('DEL', tempset)
+  return count == 0
+  """
+
 @Registry.register
 class Set(DataType):
   """
@@ -11,7 +187,7 @@ class Set(DataType):
   type = 'set'
   _scripts = {
     'union_struct': UnionStruct,
-    'intersect_struct': IntersectStruct,
+    'intersect_struct': IntersectionStruct,
     'difference_struct': DifferenceStruct,
     'symmetric_difference_redis': SymmetricDifferenceRedis,
     'symmetric_difference_struct': SymmetricDifferenceStruct,
@@ -177,179 +353,3 @@ class Set(DataType):
   def __ixor__(self, other):
     """Alias for performing a symmetric difference update."""
     return self.symmetric_difference_update(other)
-
-class UnionStruct(Script):
-  """
-  Performs a union on one Redis struct and one Python struct.
-  """
-  keys = ['newset', 'set1', 'set2']
-  variable_args = True
-
-  script = """
-  local newset = KEYS[1]
-  local set1 = KEYS[2]
-  local set2 = KEYS[3]
-
-  local set2args = ARGV
-
-  if #set2args > 2 then
-    redis.call('SADD', set2, unpack(set2args))
-  end
-
-  redis.call('SUNIONSTORE', newset, set1, set2)
-  redis.call('DEL', set2)
-  """
-
-class IntersectStruct(Script):
-  """
-  Performs an intersection on one Redis struct and one Python struct.
-  """
-  keys = ['newset', 'set1', 'set2']
-  variable_args = True
-
-  script = """
-  local newset = KEYS[1]
-  local set1 = KEYS[2]
-  local set2 = KEYS[3]
-
-  local set2args = ARGV
-
-  if #set2args > 2 then
-    redis.call('SADD', set2, unpack(set2args))
-  end
-
-  redis.call('SINTERSTORE', newset, set1, set2)
-  redis.call('DEL', set2)
-  """
-
-class DiffStruct(Script):
-  """
-  Performs an intersection on one Redis struct and one Python struct.
-  """
-  keys = ['newset', 'set1', 'set2']
-  variable_args = True
-
-  script = """
-  local newset = KEYS[1]
-  local set1 = KEYS[2]
-  local set2 = KEYS[3]
-
-  local set2args = ARGV
-
-  if #set2args > 2 then
-    redis.call('SADD', set2, unpack(set2args))
-  end
-
-  redis.call('SDIFFSTORE', newset, set1, set2)
-  redis.call('DEL', set2)
-  """
-
-class SymmetricDifferenceRedis(Script):
-  """
-  Returns a set of elements in one set or the other but not both.
-  """
-  keys = ['newset', 'set1', 'set2']
-
-  script = """
-  local newset = KEYS[1]
-  local set1 = KEYS[2]
-  local set2 = KEYS[3]
-
-  local set1diff = set1 .. ":diff"
-  local set2diff = set2 .. ":diff"
-  redis.call('SDIFFSTORE', set1diff, set1, set2)
-  redis.call('SDIFFSTORE', set2diff, set2, set1)
-  redis.call('SUNIONSTORE', newset, set1diff, set2diff)
-  redis.call('DEL', set1diff, set2diff)
-  """
-
-class SymmetricDifferenceStruct(Script):
-  """
-  Returns a set of elements in one set or the other but not both.
-  """
-  keys = ['newset', 'set1', 'set2']
-  args = []
-  variable_args = True
-
-  script = """
-  local newset = KEYS[1]
-  local set1 = KEYS[2]
-  local set2 = KEYS[3]
-
-  -- Add set 2 items.
-  local set2args = ARGV
-  if #set2args > 0 then
-    redis.call('SADD', set2, unpack(set2args))
-  end
-
-  local set1diff = set1 .. ":diff"
-  local set2diff = set2 .. ":diff"
-  redis.call('SDIFFSTORE', set1diff, set1, set2)
-  redis.call('SDIFFSTORE', set2diff, set2, set1)
-  redis.call('SUNIONSTORE', newset, set1diff, set2diff)
-  redis.call('DEL', set1diff, set2diff, set2) -- Set 2 is automatically deleted as well.
-  """
-
-class SubsetRedis(Script):
-  """
-  Returns a boolean indicating whether a set is a subset of set1.
-  """
-  keys = ['set1', 'set2']
-
-  script = """
-  local set1 = KEYS[1]
-  local set2 = KEYS[2]
-
-  return #redis.call('SDIFF', set1, set2) == 0
-  """
-
-class SubsetStruct(Script):
-  """
-  Returns a boolean indicating whether a set is a subset of set1.
-  """
-  keys = ['set1']
-  variable_args = True
-
-  script = """
-  local set1 = KEYS[1]
-  local args = ARGV
-
-  local tempset = set1 .. ':temp'
-  redis.call('SADD', tempset, unpack(args))
-
-  local count = #redis.call('SDIFF', set1, tempset)
-  redis.call('DEL', diffset)
-  return count == 0
-  """
-
-class SupersetRedis(Script):
-  """
-  Returns a boolean indicating whether a set is a superset of set1.
-  """
-  keys = ['set1', 'set2']
-
-  script = """
-  local set1 = KEYS[1]
-  local set2 = KEYS[2]
-
-  return #redis.call('SDIFF', set2, set1) == 0
-  """
-
-class SupersetStruct(Script):
-  """
-  Returns a boolean indicating whether a set is a superset of set1.
-  """
-  keys = ['set1']
-  variable_args = True
-
-  script = """
-  local set1 = KEYS[1]
-  local args = ARGV
-
-  local tempset = set1 .. ':temp'
-  redis.call('SADD', tempset, unpack(args))
-
-  local count = #redis.call('SDIFF', tempset, set1)
-  redis.call('DEL', tempset)
-  return count == 0
-  """

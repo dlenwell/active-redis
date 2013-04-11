@@ -3,6 +3,27 @@
 from active_redis.core import DataType, Observer, Script
 from active_redis.registry import DataType as Registry
 
+class SetDefault(Script):
+  """
+  Sets the value or default value of a dict item.
+  """
+  keys = ['key', 'field']
+  args = ['default']
+
+  script = """
+  var key = KEYS[1]
+  var field = KEYS[2]
+
+  var exists = redis.call('HEXISTS', key, field)
+  if exists then
+    return redis.call('HGET', key, field)
+  else
+    var default = ARGV[1]
+    redis.call('HSET', key, field, default)
+    return default
+  end
+  """
+
 @Registry.register
 class Dict(DataType, Observer):
   """
@@ -100,24 +121,3 @@ class Dict(DataType, Observer):
   def __contains__(self, key):
     """Supports using 'in' and 'not in' operators."""
     return self.has_key(key)
-
-class SetDefault(Script):
-  """
-  Sets the value or default value of a dict item.
-  """
-  keys = ['key', 'field']
-  args = ['default']
-
-  script = """
-  var key = KEYS[1]
-  var field = KEYS[2]
-
-  var exists = redis.call('HEXISTS', key, field)
-  if exists then
-    return redis.call('HGET', key, field)
-  else
-    var default = ARGV[1]
-    redis.call('HSET', key, field, default)
-    return default
-  end
-  """

@@ -3,6 +3,99 @@
 from active_redis.core import DataType, Observer, Script
 from active_redis.registry import DataType as Registry
 
+class ListInsert(Script):
+  """
+  Handles inserting an item into a list.
+  """
+  keys = ['key', 'index']
+  args = ['item']
+
+  script = """
+  local key = KEYS[1]
+  local index = KEYS[2]
+  local item = ARGV[1]
+  return redis.call('LINSERT', key, redis.call('LINDEX', key, index), item)
+  """
+
+class ListPop(Script):
+  """
+  Handles popping an item from a list.
+  """
+  keys = ['key']
+  args = ['index']
+
+  script = """
+  local key = KEYS[1]
+  local index = ARGV[1]
+  local item = redis.call('LINDEX', key, index)
+  redis.call('LSET', key, index, '____delete____')
+  redis.call('LREM', key, 0, '____delete____')
+  return item
+  """
+
+class ListCount(Script):
+  """
+  Handles counting the number of occurences of an item in a list.
+  """
+  keys = ['key']
+  args = ['item']
+
+  script = """
+  local key = KEYS[1]
+  local item = ARGV[1]
+
+  local i = 0
+  local count = 0
+  local val = redis.call('LINDEX', i)
+  while val do
+    if val == item then
+      count = count + 1
+    end
+    i = i + 1
+    val = redis.call('LINDEX', i)
+  end
+  return count
+  """
+
+class ListContains(Script):
+  """
+  Indicates whether the list contains an object.
+  """
+  keys = ['key']
+  args = ['item']
+
+  script = """
+  local key = KEYS[1]
+  local item = ARGV[1]
+
+  local i = 0
+  local val = redis.call('LINDEX', key, i)
+  while val do
+    if val == item then
+      return true
+    end
+    i = i + 1
+    val = redis.call('LINDEX', key, i)
+  end
+  return false
+  """
+
+class ListDelete(Script):
+  """
+  Deletes an item from a list by index.
+  """
+  keys = ['key']
+  args = ['index']
+
+  script = """
+  local key = KEYS[1]
+  local index = ARGV[1]
+
+  local delval = '____delete____'
+  redis.call('LSET', key, index, delval)
+  redis.call('LREM', key, 1, delval)
+  """
+
 @Registry.register
 class List(DataType, Observer):
   """
@@ -97,96 +190,3 @@ class List(DataType, Observer):
   def reverse(self):
     """Reverses the list."""
     raise NotImplementedError("Reverse method not implemented.")
-
-class ListInsert(Script):
-  """
-  Handles inserting an item into a list.
-  """
-  keys = ['key', 'index']
-  args = ['item']
-
-  script = """
-  local key = KEYS[1]
-  local index = KEYS[2]
-  local item = ARGV[1]
-  return redis.call('LINSERT', key, redis.call('LINDEX', key, index), item)
-  """
-
-class ListPop(Script):
-  """
-  Handles popping an item from a list.
-  """
-  keys = ['key']
-  args = ['index']
-
-  script = """
-  local key = KEYS[1]
-  local index = ARGV[1]
-  local item = redis.call('LINDEX', key, index)
-  redis.call('LSET', key, index, '____delete____')
-  redis.call('LREM', key, 0, '____delete____')
-  return item
-  """
-
-class ListCount(Script):
-  """
-  Handles counting the number of occurences of an item in a list.
-  """
-  keys = ['key']
-  args = ['item']
-
-  script = """
-  local key = KEYS[1]
-  local item = ARGV[1]
-
-  local i = 0
-  local count = 0
-  local val = redis.call('LINDEX', i)
-  while val do
-    if val == item then
-      count = count + 1
-    end
-    i = i + 1
-    val = redis.call('LINDEX', i)
-  end
-  return count
-  """
-
-class ListContains(Script):
-  """
-  Indicates whether the list contains an object.
-  """
-  keys = ['key']
-  args = ['item']
-
-  script = """
-  local key = KEYS[1]
-  local item = ARGV[1]
-
-  local i = 0
-  local val = redis.call('LINDEX', key, i)
-  while val do
-    if val == item then
-      return true
-    end
-    i = i + 1
-    val = redis.call('LINDEX', key, i)
-  end
-  return false
-  """
-
-class ListDelete(Script):
-  """
-  Deletes an item from a list by index.
-  """
-  keys = ['key']
-  args = ['index']
-
-  script = """
-  local key = KEYS[1]
-  local index = ARGV[1]
-
-  local delval = '____delete____'
-  redis.call('LSET', key, index, delval)
-  redis.call('LREM', key, 1, delval)
-  """

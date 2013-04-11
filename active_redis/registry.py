@@ -45,6 +45,10 @@ class DataType(Registry):
   """
   _handlers = {}
 
+def datatype(cls):
+  """Registers a datatype."""
+  return DataType.register(cls)
+
 class Observable(Registry):
   """
   Observable registry.
@@ -65,3 +69,7 @@ class Observable(Registry):
       raise RegistryError("Invalid handler type %s." % (type,))
     else:
       return cls._handlers[type]
+
+def observable(cls):
+  """Registers an observable."""
+  return Observable.register(cls)

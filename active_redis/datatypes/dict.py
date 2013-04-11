@@ -1,7 +1,7 @@
 # Copyright (c) 2013 Jordan Halterman <jordan.halterman@gmail.com>
 # See LICENSE for details.
 from active_redis.core import DataType, Observer, Script
-from active_redis.registry import DataType as Registry
+from active_redis.registry import datatype
 
 class SetDefault(Script):
   """
@@ -41,7 +41,7 @@ class PopItem(Script):
   return nil
   """
 
-@Registry.register
+@datatype
 class Dict(DataType, Observer):
   """
   A Redis dict data type.

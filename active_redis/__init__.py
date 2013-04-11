@@ -1,6 +1,9 @@
 from active_redis.core import (
   ActiveRedis,
+  ActiveRedisClient,
   DataType,
+  Observer,
+  Observable,
   Script,
 )
 import active_redis.observables

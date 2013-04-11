@@ -1,7 +1,7 @@
 # Copyright (c) 2013 Jordan Halterman <jordan.halterman@gmail.com>
 # See LICENSE for details.
 from active_redis.core import DataType, Observer, Script
-from active_redis.registry import DataType as Registry
+from active_redis.registry import datatype
 
 class ListInsert(Script):
   """
@@ -118,7 +118,7 @@ class ListDelete(Script):
   redis.call('LREM', key, 1, delval)
   """
 
-@Registry.register
+@datatype
 class List(DataType, Observer):
   """
   A Redis list data type.

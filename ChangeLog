@@ -1,0 +1,64 @@
+CHANGES
+=======
+
+* Add option for delete/not deleting key references
+* Support locking data types
+* Do not observe irrelevant items in dict
+* Use 'key' rather than 'index' in dict
+* Fix bad Lua script variable in dict
+* Add test classes
+* Add LICENSE
+* Update README documentation
+* Add observable example
+* Add script example
+* Add data type example
+* Refactor registry to be more simple
+* Remove basic examples
+* Add set example
+* Add dict example
+* Update dict and set examples
+* Add popitem() dictionary method handler
+* Add list reverse() support
+* Add print support to sets
+* Add print support to dictionaries
+* Add print support to lists
+* Update list example
+* Add list example
+* Fix bugs throughout
+* Move script handlers to top of data type modules
+* Automatically import data types and observables
+* Replace use of deprecated wrap() method with observe() in observer data types
+* Make list and dict data types observers
+* Rename 'Hash' class to 'Dict'
+* Update all script registration
+* Rename 'redis' property to 'client' in data type handlers
+* Add copyright notices to all modules
+* Update data type registering
+* Remove old unit test modules
+* Add list data type
+* Add dict data type
+* Add set data type
+* Add delete all script to base data type
+* Add observables
+* Migrate core classes to single 'core' module and restructure several classes
+* Add LICENSE file
+* Add list pop server-side script
+* Add ability to observe Python data structures after serialization
+* Refactor Lua delete script to ensure references are properly deleted
+* Update basic example to follow README
+* Update README documentation
+* Fix some key prefix issues
+* Fix bugs in internally referencing Redis objects
+* Add empty unit test modules
+* Add basic examples script
+* Add general object delete Lua script
+* Improve list server-side Lua scripts
+* Add server-side lua scripts for sets
+* Clean up code throughout
+* Update List methods
+* Add separate modules for datatypes and exceptions
+* Add support for registering data types and scripts
+* Add DataType and Encoder classes
+* Add \_\_init\_\_ file
+* Add core Active Redis module
+* Initial commit

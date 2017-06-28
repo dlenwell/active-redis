@@ -1,0 +1,96 @@
+Metadata-Version: 1.1
+Name: active-redis
+Version: 0.0.1.dev61
+Summary: Active Redis is a Python library for interacting with Redis data structures using common Python classes.
+Home-page: UNKNOWN
+Author: Jordan Halterman
+Author-email: UNKNOWN
+License: UNKNOWN
+Description: Active Redis
+        ============
+        
+        Active Redis is a Python library for interacting with Redis data structures
+        using common Python classes. It supports nested objects by automatically
+        mapping and loading keys. The Active Redis API is extensible, as well,
+        allowing users to define new data structures and their behaviors.
+        
+        Note that this library is still under development and currently
+        lacks tests.
+        
+        ### Usage
+        ```python
+        from active_redis import ActiveRedis
+        
+        activeredis = ActiveRedis()
+        
+        # Create a new dict with the key 'foo_dict'.
+        foodict = activeredis.dict('foo_dict')
+        foodict['foo'] = []
+        
+        # Store a JSON serialized list ['bar'] at key 'foo_dict' field 'foo'.
+        foodict['foo'] = ['bar']
+        
+        print len(foodict) # 1
+        
+        # Even once the list has been serialized, we can still append new
+        # values to the list and it will be automatically re-serialized.
+        # Active Redis internally wraps and monitors the list for changes.
+        foodict['foo'].append('baz')
+        
+        # Create a new list with the key 'foo_list'.
+        foolist = activeredis.list('foo_list')
+        
+        # Append the dict 'foo_dict' to the list.
+        # This will RPUSH an Active Redis reference to 'foo_dict'.
+        foolist.append(foodict)
+        
+        print foolist[0]['foo'] # ['bar', 'baz']
+        
+        # We can load the objects using the same keys.
+        del foodict
+        foodict = activeredis.dict('foo_dict')
+        print foodict['foo'] # ['bar', 'baz']
+        
+        del foolist
+        foolist = activeredis.list('foo_list')
+        print foolist[0]['foo'] # ['bar', 'baz']
+        
+        foolist[0]['foo'].reverse()
+        print foolist[0]['foo'] # ['baz', 'bar']
+        
+        # If we want to actually delete the keys, call the delete() method.
+        # This will delete all referenced keys as well.
+        foolist.delete()
+        
+        try:
+          foodict['foo'] # Not happening.
+        except KeyError:
+          print "foodict['foo'] is gone!"
+        else:
+          print "foodict['foo'] is not gone!"
+        
+        # Finally, if key names are irrelevant (such as in the case of
+        # a job queue) Active Redis can automatically generate unique keys.
+        fooset = activeredis.set()
+        fooset.add('foo')
+        fooset.add('bar')
+        
+        # Event complex operations are supported via server-side Lua scripting.
+        barset = activeredis.set()
+        barset.add('bar')
+        barset.add('baz')
+        
+        fooset &= barset
+        ```
+        
+        
+Platform: UNKNOWN
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Information Technology
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: POSIX :: Linux
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.4
